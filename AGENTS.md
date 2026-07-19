@@ -2,6 +2,20 @@
 
 This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
 
+## Build & Test
+
+BeerCycle is a web arcade game (Phaser 3 + TypeScript + Vite, static deploy).
+Design doc: `docs/GAME_DESIGN.md`. Scenes in `src/scenes/`, leaderboard
+abstraction in `src/systems/leaderboard.ts`.
+
+```bash
+npm install       # Install dependencies
+npm run dev       # Vite dev server on http://localhost:5173
+npm run build     # Type-check (tsc) + production build to dist/
+```
+
+No test suite yet; `npm run build` is the quality gate.
+
 > **Architecture in one line:** Issues live in a local Dolt database
 > (`.beads/dolt/`); cross-machine sync uses `bd dolt push/pull` (a
 > git-compatible protocol), stored under `refs/dolt/data` on your git

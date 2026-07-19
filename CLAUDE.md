@@ -60,18 +60,30 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Build & Test
 
-_Add your build and test commands here_
-
 ```bash
-# Example:
-# npm install
-# npm test
+npm install       # Install dependencies
+npm run dev       # Vite dev server on http://localhost:5173
+npm run build     # Type-check (tsc) + production build to dist/
+npm run preview   # Serve the production build locally
 ```
+
+No test suite yet. `npm run build` is the current quality gate (strict tsc).
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+BeerCycle is a web arcade game: **Phaser 3 + TypeScript + Vite**, deployed as
+a static site. Design doc: `docs/GAME_DESIGN.md` (locked decisions at bottom).
+
+- `src/main.ts` — Phaser game config (480×270 internal res, pixelArt, FIT
+  scaling). Exposes `window.__beercycle` in dev builds for console debugging.
+- `src/scenes/` — one class per scene: `Boot → Menu → Game → Results`.
+- `src/systems/leaderboard.ts` — `LeaderboardStore` interface with a
+  localStorage implementation; an online backend must implement the same
+  interface (do not couple game code to localStorage directly).
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- Keyboard-only controls for MVP; parody brewery names only (roster in the
+  design doc — no real brewery trademarks).
+- Low internal resolution + integer-ish upscale for the SNES look; keep
+  `pixelArt: true` and avoid sub-pixel text sizes.
