@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../main";
 import { BuzzSystem } from "../systems/buzz";
+import { PEARL_ST_BREWERIES, type Brewery } from "../systems/breweries";
 
 // Core riding model: the route is a 1D distance axis (d) with a lateral
 // position (lat, 0..ROAD_WIDTH) across the road. Screen position is a
@@ -30,6 +31,14 @@ interface Prop {
   obj: Phaser.GameObjects.Shape;
 }
 
+// Fixed roadside set dressing (brewery buildings, stop zones): projected
+// like props but never recycled.
+interface Fixture {
+  d: number;
+  lat: number;
+  obj: Phaser.GameObjects.Container | Phaser.GameObjects.Rectangle;
+}
+
 interface SteerSample {
   t: number;
   v: number;
@@ -38,11 +47,15 @@ interface SteerSample {
 export class GameScene extends Phaser.Scene {
   private buzz!: BuzzSystem;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+  private spaceKey!: Phaser.Input.Keyboard.Key;
+  private enterKey!: Phaser.Input.Keyboard.Key;
   private props: Prop[] = [];
+  private fixtures: Fixture[] = [];
   private road!: Phaser.GameObjects.Rectangle;
   private bike!: Phaser.GameObjects.Container;
   private vignette!: Phaser.GameObjects.Image;
 
+  private mode: "riding" | "chugging" = "riding";
   private d = 0;
   private lat = ROAD_WIDTH / 2;
   private speed = MIN_SPEED;
@@ -52,10 +65,26 @@ export class GameScene extends Phaser.Scene {
   private invulnTimer = 0;
   private steerHistory: SteerSample[] = [];
 
+  // Brewery stop state.
+  private visited = new Set<string>();
+  private streak = 0;
+  private beerNum = 1;
+  private markerPhase = 0;
+  private markerSpeed = 2.4;
+  private chugLocked = false;
+  private resultTimer = 0;
+
   private scoreText!: Phaser.GameObjects.Text;
   private livesText!: Phaser.GameObjects.Text;
   private buzzFill!: Phaser.GameObjects.Rectangle;
   private progressFill!: Phaser.GameObjects.Rectangle;
+
+  private chugPanel!: Phaser.GameObjects.Container;
+  private chugName!: Phaser.GameObjects.Text;
+  private chugInfo!: Phaser.GameObjects.Text;
+  private chugFeedback!: Phaser.GameObjects.Text;
+  private chugPrompt!: Phaser.GameObjects.Text;
+  private chugMarker!: Phaser.GameObjects.Rectangle;
 
   constructor() {
     super("Game");
@@ -64,7 +93,9 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.buzz = new BuzzSystem();
     this.props = [];
+    this.fixtures = [];
     this.steerHistory = [];
+    this.mode = "riding";
     this.d = 0;
     this.lat = ROAD_WIDTH / 2;
     this.speed = MIN_SPEED;
@@ -72,6 +103,8 @@ export class GameScene extends Phaser.Scene {
     this.lives = START_LIVES;
     this.crashTimer = 0;
     this.invulnTimer = 0;
+    this.visited = new Set();
+    this.streak = 0;
 
     // Grass oversized so camera sway never reveals the void.
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 700, 500, 0x4a6741).setDepth(-30);
@@ -105,6 +138,23 @@ export class GameScene extends Phaser.Scene {
       });
     }
 
+    // Brewery buildings, signs, and stop zones on the shoulder.
+    for (const b of PEARL_ST_BREWERIES) {
+      const buildingLat = b.side === "left" ? -40 : ROAD_WIDTH + 40;
+      const zoneLat = b.side === "left" ? 8 : ROAD_WIDTH - 8;
+      const building = this.add.container(0, 0, [
+        this.add.rectangle(0, 0, 34, 26, 0x6b4226),
+        this.add.rectangle(0, -16, 40, 8, 0x2b1a10),
+        this.add
+          .text(0, -16, b.name, { fontFamily: "monospace", fontSize: "7px", color: "#f7e8b0" })
+          .setOrigin(0.5),
+        this.add.rectangle(0, 6, 8, 12, 0x2b1a10), // door
+      ]);
+      const zone = this.add.rectangle(0, 0, 42, 24, 0xf7b32b, 0.28).setRotation(ROAD_ANGLE);
+      this.fixtures.push({ d: b.d, lat: buildingLat, obj: building });
+      this.fixtures.push({ d: b.d, lat: zoneLat, obj: zone });
+    }
+
     const body = this.add.rectangle(0, 0, 10, 18, 0xf7b32b);
     const helmet = this.add.rectangle(0, -7, 6, 4, 0xf7f7e8);
     this.bike = this.add.container(ANCHOR.x, ANCHOR.y, [body, helmet]).setDepth(ANCHOR.y);
@@ -129,12 +179,13 @@ export class GameScene extends Phaser.Scene {
       .setAlpha(0);
 
     this.createHud();
+    this.createChugPanel();
 
     this.cursors = this.input.keyboard!.createCursorKeys();
+    this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.enterKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
     this.input.keyboard!.once("keydown-ESC", () => this.endRun(false));
     if (import.meta.env.DEV) {
-      // Buzz sources arrive with brewery stops (beercycle-az9); until then
-      // B/N drive the meter for testing.
       this.input.keyboard!.on("keydown-B", () => this.buzz.drink(15));
       this.input.keyboard!.on("keydown-N", () => this.buzz.sober(15));
     }
@@ -164,9 +215,40 @@ export class GameScene extends Phaser.Scene {
     ) as Phaser.GameObjects.Rectangle;
   }
 
+  private createChugPanel(): void {
+    const style = (size: string, color: string) => ({
+      fontFamily: "monospace",
+      fontSize: size,
+      color,
+    });
+    const panel = this.add.rectangle(0, 0, 320, 130, 0x14101c, 0.95).setStrokeStyle(2, 0xf7b32b);
+    this.chugName = this.add.text(0, -44, "", style("14px", "#f7b32b")).setOrigin(0.5);
+    this.chugInfo = this.add.text(0, -26, "", style("10px", "#cfcfcf")).setOrigin(0.5);
+    this.chugFeedback = this.add.text(0, -6, "", style("11px", "#8fd694")).setOrigin(0.5);
+    const meterBg = this.add.rectangle(0, 20, 180, 10, 0x222222);
+    const sweetSpot = this.add.rectangle(0, 20, 28, 10, 0x8fd694, 0.5);
+    this.chugMarker = this.add.rectangle(0, 20, 4, 16, 0xf7f7e8);
+    this.chugPrompt = this.add.text(0, 46, "", style("9px", "#9a9a9a")).setOrigin(0.5);
+
+    this.chugPanel = this.add
+      .container(GAME_WIDTH / 2, GAME_HEIGHT / 2, [
+        panel, this.chugName, this.chugInfo, this.chugFeedback,
+        meterBg, sweetSpot, this.chugMarker, this.chugPrompt,
+      ])
+      .setScrollFactor(0)
+      .setDepth(1002)
+      .setVisible(false);
+  }
+
   update(_time: number, delta: number): void {
     const dt = Math.min(delta / 1000, 0.05);
     const now = this.time.now;
+
+    if (this.mode === "chugging") {
+      this.chugUpdate(dt);
+      this.refreshHud();
+      return;
+    }
 
     if (this.crashTimer > 0) {
       this.crashTimer -= dt;
@@ -220,6 +302,17 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    // Brewery stop zones: ride onto the marked shoulder to stop in.
+    for (const b of PEARL_ST_BREWERIES) {
+      if (this.visited.has(b.name)) continue;
+      const nearD = Math.abs(b.d - this.d) < 18;
+      const onSide = b.side === "left" ? this.lat < 16 : this.lat > ROAD_WIDTH - 16;
+      if (nearD && onSide) {
+        this.enterStop(b);
+        return;
+      }
+    }
+
     // Cone collisions.
     if (this.invulnTimer <= 0) {
       for (const p of this.props) {
@@ -242,13 +335,88 @@ export class GameScene extends Phaser.Scene {
     this.vignette.setAlpha(fx.vignette * 0.85);
 
     this.layoutWorld();
+    this.refreshHud();
+  }
+
+  // --- Brewery stop minigame -------------------------------------------
+
+  private enterStop(b: Brewery): void {
+    this.mode = "chugging";
+    this.visited.add(b.name);
+    this.streak++;
+    this.beerNum = 1;
+    this.markerSpeed = 2.4;
+    this.markerPhase = Math.random() * Math.PI * 2;
+    this.chugLocked = false;
+    this.resultTimer = 0;
+    this.bike.rotation = 0;
+    this.chugPanel.setVisible(true);
+    this.chugName.setText(b.name);
+    this.chugFeedback.setText("");
+    this.chugPrompt.setText("SPACE: slam it");
+    this.updateChugInfo();
+  }
+
+  private updateChugInfo(): void {
+    this.chugInfo.setText(`BEER #${this.beerNum}   STREAK x${this.streak}`);
+  }
+
+  private chugUpdate(dt: number): void {
+    if (!this.chugLocked) {
+      this.markerPhase += this.markerSpeed * dt;
+      const pos = 0.5 + 0.5 * Math.sin(this.markerPhase);
+      this.chugMarker.x = -90 + 180 * pos;
+      if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+        const accuracy = 1 - Math.abs(pos - 0.5) * 2;
+        const perfect = accuracy > 0.85;
+        let points = Math.round((80 + 120 * accuracy) * this.streak);
+        if (perfect) points = Math.round(points * 1.5);
+        this.score += points;
+        this.buzz.drink(14 + 6 * this.beerNum);
+        this.chugLocked = true;
+        this.resultTimer = 0.8;
+        this.chugFeedback.setText(perfect ? `PERFECT POUR! +${points}` : `+${points}`);
+        this.chugPrompt.setText("");
+      }
+      return;
+    }
+    if (this.resultTimer > 0) {
+      this.resultTimer -= dt;
+      if (this.resultTimer <= 0) {
+        this.chugPrompt.setText("SPACE: one more    ENTER: ride on");
+      }
+      return;
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+      this.beerNum++;
+      this.markerSpeed *= 1.25;
+      this.chugLocked = false;
+      this.chugFeedback.setText("");
+      this.chugPrompt.setText("SPACE: slam it");
+      this.updateChugInfo();
+    } else if (Phaser.Input.Keyboard.JustDown(this.enterKey)) {
+      this.exitStop();
+    }
+  }
+
+  private exitStop(): void {
+    this.mode = "riding";
+    this.chugPanel.setVisible(false);
+    this.speed = MIN_SPEED;
+    this.invulnTimer = 1;
+    this.steerHistory = [];
+  }
+
+  // --- World & helpers -------------------------------------------------
+
+  private refreshHud(): void {
     this.scoreText.setText(`SCORE ${Math.floor(this.score)}`);
     this.livesText.setText(`LIVES ${this.lives}`);
     this.buzzFill.width = 50 * (this.buzz.level / 100);
     this.progressFill.width = 78 * (this.d / ROUTE_LENGTH);
   }
 
-  // Project every prop (and the road band) from route space to the screen.
+  // Project every prop and fixture from route space to the screen.
   private layoutWorld(): void {
     const roadOff = ROAD_WIDTH / 2 - this.lat;
     this.road.setPosition(ANCHOR.x + CROSS.x * roadOff, ANCHOR.y + CROSS.y * roadOff);
@@ -258,13 +426,24 @@ export class GameScene extends Phaser.Scene {
         p.d += p.span;
         if (p.kind === "cone") p.lat = Phaser.Math.FloatBetween(12, ROAD_WIDTH - 12);
       }
-      const rel = p.d - this.d;
-      const latOff = p.lat - this.lat;
-      const sx = ANCHOR.x + CROSS.x * latOff + FORWARD.x * rel;
-      const sy = ANCHOR.y + CROSS.y * latOff + FORWARD.y * rel;
-      p.obj.setPosition(sx, sy).setDepth(sy);
-      p.obj.setVisible(rel > -100 && rel < 260);
+      this.place(p.obj, p.d, p.lat);
     }
+    for (const f of this.fixtures) {
+      this.place(f.obj, f.d, f.lat);
+    }
+  }
+
+  private place(
+    obj: Phaser.GameObjects.Container | Phaser.GameObjects.Shape,
+    d: number,
+    lat: number,
+  ): void {
+    const rel = d - this.d;
+    const latOff = lat - this.lat;
+    const sx = ANCHOR.x + CROSS.x * latOff + FORWARD.x * rel;
+    const sy = ANCHOR.y + CROSS.y * latOff + FORWARD.y * rel;
+    obj.setPosition(sx, sy).setDepth(sy);
+    obj.setVisible(rel > -100 && rel < 260);
   }
 
   // Buzz input lag: steer commands replay from a short history buffer.
@@ -288,6 +467,10 @@ export class GameScene extends Phaser.Scene {
 
   private endRun(finished: boolean): void {
     this.cameras.main.setScroll(0, 0);
-    this.scene.start("Results", { score: Math.floor(this.score), finished });
+    this.scene.start("Results", {
+      score: Math.floor(this.score),
+      finished,
+      breweries: this.visited.size,
+    });
   }
 }
