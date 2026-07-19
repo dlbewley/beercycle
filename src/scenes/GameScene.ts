@@ -4,7 +4,11 @@ import { BuzzSystem } from "../systems/buzz";
 import { type Brewery } from "../systems/breweries";
 import { ROUTES, type RouteDef } from "../systems/routes";
 import { audio } from "../systems/audio";
-import { type AvatarId, type AvatarState } from "../art/pixelart";
+import { type AvatarId, type AvatarState, AVATARS } from "../art/pixelart";
+import {
+  type BeerDef, mechanicFor, effectFor, buzzFor, pointsFor, markerSpeedFor, styleLabel,
+} from "../systems/beers";
+import { vocabLine } from "../systems/vocab";
 
 // Core riding model: the route is a 1D distance axis (d) with a lateral
 // position (lat, 0..ROAD_WIDTH) across the road. Screen position is a
@@ -139,8 +143,16 @@ export class GameScene extends Phaser.Scene {
   private beerNum = 1;
   private markerPhase = 0;
   private markerSpeed = 2.4;
-  private chugLocked = false;
   private resultTimer = 0;
+  private chugPhase: "pick" | "active" | "result" = "pick";
+  private currentBrewery: Brewery | null = null;
+  private tapIndex = 0;
+  private fillLevel = 0;
+  private jitterCd = 0;
+  // Post-drink effects on riding.
+  private heavyTimer = 0;
+  private boostTimer = 0;
+  private chiliTimer = 0;
 
   private scoreText!: Phaser.GameObjects.Text;
   private livesText!: Phaser.GameObjects.Text;
@@ -148,11 +160,23 @@ export class GameScene extends Phaser.Scene {
   private progressFill!: Phaser.GameObjects.Rectangle;
 
   private chugPanel!: Phaser.GameObjects.Container;
+  private chugPanelBg!: Phaser.GameObjects.Rectangle;
+  private chugGlyph!: Phaser.GameObjects.Image;
   private chugName!: Phaser.GameObjects.Text;
+  private chugTagline!: Phaser.GameObjects.Text;
+  private chugEnterLine!: Phaser.GameObjects.Text;
   private chugInfo!: Phaser.GameObjects.Text;
   private chugFeedback!: Phaser.GameObjects.Text;
   private chugPrompt!: Phaser.GameObjects.Text;
   private chugMarker!: Phaser.GameObjects.Rectangle;
+  private chugSweetSpot!: Phaser.GameObjects.Rectangle;
+  private chugFillBar!: Phaser.GameObjects.Rectangle;
+  private tapSlots: Array<{
+    box: Phaser.GameObjects.Rectangle;
+    glass: Phaser.GameObjects.Image;
+    label: Phaser.GameObjects.Text;
+  }> = [];
+  private chiliOverlay!: Phaser.GameObjects.Rectangle;
 
   constructor() {
     super("Game");
@@ -179,6 +203,10 @@ export class GameScene extends Phaser.Scene {
     this.invulnTimer = 1; // grace period at the route start
     this.visited = new Set();
     this.streak = data.streak ?? 0;
+    this.currentBrewery = null;
+    this.heavyTimer = 0;
+    this.boostTimer = 0;
+    this.chiliTimer = 0;
     this.npcs = [];
     this.pickups = [];
     this.cops = [];
@@ -349,6 +377,12 @@ export class GameScene extends Phaser.Scene {
       .setDepth(1000)
       .setAlpha(0);
 
+    this.chiliOverlay = this.add
+      .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0xc23b2a)
+      .setScrollFactor(0)
+      .setDepth(999)
+      .setAlpha(0);
+
     this.createHud();
     this.createChugPanel();
 
@@ -419,19 +453,48 @@ export class GameScene extends Phaser.Scene {
       fontSize: size,
       color,
     });
-    const panel = this.add.rectangle(0, 0, 320, 130, 0x14101c, 0.95).setStrokeStyle(2, 0xf7b32b);
-    this.chugName = this.add.text(0, -44, "", style("14px", "#f7b32b")).setOrigin(0.5);
-    this.chugInfo = this.add.text(0, -26, "", style("10px", "#cfcfcf")).setOrigin(0.5);
-    this.chugFeedback = this.add.text(0, -6, "", style("11px", "#8fd694")).setOrigin(0.5);
-    const meterBg = this.add.rectangle(0, 20, 180, 10, 0x222222);
-    const sweetSpot = this.add.rectangle(0, 20, 28, 10, 0x8fd694, 0.5);
-    this.chugMarker = this.add.rectangle(0, 20, 4, 16, 0xf7f7e8);
-    this.chugPrompt = this.add.text(0, 46, "", style("9px", "#9a9a9a")).setOrigin(0.5);
+    this.chugPanelBg = this.add
+      .rectangle(0, 0, 344, 152, 0x14101c, 0.95)
+      .setStrokeStyle(2, 0xf7b32b);
+    this.chugGlyph = this.add.image(-100, -60, "glyph_moon");
+    this.chugName = this.add.text(0, -60, "", style("13px", "#f7b32b")).setOrigin(0.5);
+    this.chugTagline = this.add.text(0, -46, "", style("7px", "#8f8fa0")).setOrigin(0.5);
+    this.chugEnterLine = this.add.text(0, -35, "", style("8px", "#8fd694")).setOrigin(0.5);
+
+    this.tapSlots = [];
+    for (let i = 0; i < 3; i++) {
+      const x = (i - 1) * 108;
+      const box = this.add.rectangle(x, -6, 100, 40, 0xffffff, 0.05).setStrokeStyle(1, 0x555566);
+      const glass = this.add.image(x - 36, -6, "glass_kinda");
+      const label = this.add
+        .text(x + 8, -6, "", {
+          fontFamily: "monospace",
+          fontSize: "7px",
+          color: "#e8e8e8",
+          align: "center",
+          wordWrap: { width: 66 },
+        })
+        .setOrigin(0.5);
+      this.tapSlots.push({ box, glass, label });
+    }
+
+    this.chugInfo = this.add.text(0, 22, "", style("8px", "#cfcfcf")).setOrigin(0.5);
+    this.chugFeedback = this.add.text(0, 35, "", style("10px", "#8fd694")).setOrigin(0.5);
+    const meterBg = this.add.rectangle(0, 52, 180, 10, 0x222222);
+    this.chugFillBar = this.add
+      .rectangle(-90, 52, 0, 8, 0xd9a516)
+      .setOrigin(0, 0.5)
+      .setVisible(false);
+    this.chugSweetSpot = this.add.rectangle(0, 52, 28, 10, 0x8fd694, 0.5);
+    this.chugMarker = this.add.rectangle(0, 52, 4, 16, 0xf7f7e8);
+    this.chugPrompt = this.add.text(0, 66, "", style("8px", "#9a9a9a")).setOrigin(0.5);
 
     this.chugPanel = this.add
-      .container(GAME_WIDTH / 2, GAME_HEIGHT / 2, [
-        panel, this.chugName, this.chugInfo, this.chugFeedback,
-        meterBg, sweetSpot, this.chugMarker, this.chugPrompt,
+      .container(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 4, [
+        this.chugPanelBg, this.chugGlyph, this.chugName, this.chugTagline, this.chugEnterLine,
+        ...this.tapSlots.flatMap((s) => [s.box, s.glass as Phaser.GameObjects.GameObject, s.label]),
+        this.chugInfo, this.chugFeedback,
+        meterBg, this.chugFillBar, this.chugSweetSpot, this.chugMarker, this.chugPrompt,
       ])
       .setScrollFactor(0)
       .setDepth(1002)
@@ -482,6 +545,16 @@ export class GameScene extends Phaser.Scene {
     if (this.cursors.up.isDown) this.speed += 120 * response * dt;
     if (this.cursors.down.isDown) this.speed -= 160 * response * dt;
     this.speed = Phaser.Math.Clamp(this.speed, MIN_SPEED, MAX_SPEED);
+
+    // Post-drink effects: heavy legs after a stout, refreshed after a
+    // lager, and the chili beer takes the wheel entirely.
+    this.heavyTimer = Math.max(0, this.heavyTimer - dt);
+    this.boostTimer = Math.max(0, this.boostTimer - dt);
+    this.chiliTimer = Math.max(0, this.chiliTimer - dt);
+    if (this.heavyTimer > 0) this.speed = Math.min(this.speed, 105);
+    if (this.chiliTimer > 0) this.speed = Math.max(this.speed, 175);
+    else if (this.boostTimer > 0) this.speed = Math.max(this.speed, 85);
+    this.chiliOverlay.setAlpha(this.chiliTimer > 0 ? 0.12 + 0.08 * Math.sin(now * 0.02) : 0);
 
     this.lat += (steer * STEER_SPEED + fx.steerDrift) * dt;
     const offRoad = this.lat < 0 || this.lat > ROAD_WIDTH;
@@ -707,67 +780,183 @@ export class GameScene extends Phaser.Scene {
 
   private enterStop(b: Brewery): void {
     this.mode = "chugging";
+    this.currentBrewery = b;
     this.visited.add(b.name);
     this.streak++;
     this.beerNum = 1;
-    this.markerSpeed = 2.4;
-    this.markerPhase = Math.random() * Math.PI * 2;
-    this.chugLocked = false;
     this.resultTimer = 0;
     this.bike.rotation = 0;
     audio.sfx("bell");
     this.chugPanel.setVisible(true);
+    this.chugPanelBg.setStrokeStyle(2, b.accent);
+    this.chugGlyph.setTexture(`glyph_${b.glyph}`).setTint(b.accent);
     this.chugName.setText(b.name);
+    this.chugTagline.setText(b.tagline);
+    this.chugEnterLine.setText(vocabLine(this.avatarId, "enter"));
     this.chugFeedback.setText("");
-    this.chugPrompt.setText("SPACE: slam it");
-    this.updateChugInfo();
+    this.enterPickPhase();
   }
 
-  private updateChugInfo(): void {
+  private get selectedBeer(): BeerDef {
+    return this.currentBrewery!.taps[this.tapIndex];
+  }
+
+  private enterPickPhase(): void {
+    this.chugPhase = "pick";
+    this.tapIndex = 0;
+    this.chugMarker.setVisible(false);
+    this.chugSweetSpot.setVisible(false);
+    this.chugFillBar.setVisible(false);
+    this.chugFeedback.setText("");
+    this.chugPrompt.setText("< > choose your beer    SPACE: order    ENTER: ride on");
+    this.refreshTapUI();
+  }
+
+  private refreshTapUI(): void {
+    const taps = this.currentBrewery!.taps;
+    const accent = this.currentBrewery!.accent;
+    this.tapSlots.forEach((slot, i) => {
+      const beer = taps[i];
+      const has = !!beer;
+      slot.box.setVisible(has);
+      slot.glass.setVisible(has);
+      slot.label.setVisible(has);
+      if (!has) return;
+      slot.glass.setTexture(`glass_${beer.id}`);
+      slot.label.setText(beer.name);
+      slot.box.setStrokeStyle(i === this.tapIndex ? 2 : 1, i === this.tapIndex ? accent : 0x555566);
+      slot.box.setFillStyle(0xffffff, i === this.tapIndex ? 0.12 : 0.04);
+    });
+    const sel = this.selectedBeer;
     this.chugInfo.setText(
-      `BEER #${this.beerNum}   STREAK x${this.streak}${this.happyHour ? "   HAPPY HOUR 2X" : ""}`,
+      `${styleLabel(sel)}   BEER #${this.beerNum}   STREAK x${this.streak}` +
+        `${this.happyHour ? "   HAPPY HOUR 2X" : ""}`,
     );
   }
 
+  private beginChug(): void {
+    const beer = this.selectedBeer;
+    this.chugPhase = "active";
+    this.chugMarker.setVisible(true);
+    this.chugSweetSpot.setVisible(true);
+    const mech = mechanicFor(beer.style);
+    if (mech === "fill") {
+      // Careful pour: sweet zone sits near the rim.
+      this.fillLevel = 0;
+      this.chugFillBar.setVisible(true).setFillStyle(
+        Phaser.Display.Color.HexStringToColor(beer.color).color,
+      );
+      this.chugFillBar.width = 0;
+      this.chugSweetSpot.setPosition(0.885 * 180 - 90, 52).setSize(30, 10);
+      this.chugMarker.x = -90;
+      this.chugPrompt.setText("HOLD SPACE to pour — release at the line");
+    } else {
+      this.markerPhase = Math.random() * Math.PI * 2;
+      this.markerSpeed = markerSpeedFor(beer.style) * (1 + 0.22 * (this.beerNum - 1));
+      this.jitterCd = 0.4;
+      this.chugFillBar.setVisible(false);
+      this.chugSweetSpot.setPosition(0, 52).setSize(28, 10);
+      this.chugPrompt.setText(mech === "jitter" ? "SPACE: slam it (it puckers)" : "SPACE: slam it");
+    }
+  }
+
+  private lockBeer(accuracy: number, overflow: boolean): void {
+    const beer = this.selectedBeer;
+    const perfect = !overflow && accuracy > 0.85;
+    let points = Math.round(pointsFor(beer) * (0.4 + 0.6 * accuracy) * this.streak);
+    if (perfect) points = Math.round(points * 1.5);
+    if (this.happyHour) points *= 2;
+    this.score += points;
+    this.buzz.drink(buzzFor(beer) + 4 * (this.beerNum - 1));
+    audio.sfx(perfect ? "pour" : "chug");
+    const effect = effectFor(beer.style);
+    if (effect === "heavy") this.heavyTimer = 5;
+    if (effect === "refresh") this.boostTimer = 5;
+    if (effect === "chili") {
+      this.chiliTimer = 4;
+      this.cameras.main.shake(250, 0.012);
+    }
+    if (perfect) {
+      this.smugTimer = 1.2;
+      this.chugFeedback.setText(`${vocabLine(this.avatarId, "perfect")} +${points}`);
+    } else {
+      this.chugFeedback.setText(overflow ? `FOAM. EVERYWHERE. +${points}` : `+${points}`);
+    }
+    this.chugPhase = "result";
+    this.resultTimer = 0.9;
+    this.chugPrompt.setText("");
+  }
+
   private chugUpdate(dt: number): void {
-    if (!this.chugLocked) {
-      this.markerPhase += this.markerSpeed * dt;
-      const pos = 0.5 + 0.5 * Math.sin(this.markerPhase);
-      this.chugMarker.x = -90 + 180 * pos;
-      if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-        const accuracy = 1 - Math.abs(pos - 0.5) * 2;
-        const perfect = accuracy > 0.85;
-        let points = Math.round((80 + 120 * accuracy) * this.streak);
-        if (perfect) points = Math.round(points * 1.5);
-        if (this.happyHour) points *= 2;
-        this.score += points;
-        this.buzz.drink(14 + 6 * this.beerNum);
-        audio.sfx(perfect ? "pour" : "chug");
-        this.chugLocked = true;
-        this.resultTimer = 0.8;
-        if (perfect) this.smugTimer = 1.2;
-        const perfectLine =
-          this.avatarId === "drellis" ? `IMPECCABLE MOUTHFEEL! +${points}` : `PERFECT POUR! +${points}`;
-        this.chugFeedback.setText(perfect ? perfectLine : `+${points}`);
-        this.chugPrompt.setText("");
+    this.smugTimer = Math.max(0, this.smugTimer - dt);
+    const space = this.spaceKey;
+
+    if (this.chugPhase === "pick") {
+      const taps = this.currentBrewery!.taps;
+      if (Phaser.Input.Keyboard.JustDown(this.cursors.left)) {
+        this.tapIndex = (this.tapIndex + taps.length - 1) % taps.length;
+        this.refreshTapUI();
+      } else if (Phaser.Input.Keyboard.JustDown(this.cursors.right)) {
+        this.tapIndex = (this.tapIndex + 1) % taps.length;
+        this.refreshTapUI();
+      } else if (Phaser.Input.Keyboard.JustDown(space)) {
+        this.beginChug();
+      } else if (Phaser.Input.Keyboard.JustDown(this.enterKey)) {
+        this.exitStop();
       }
       return;
     }
-    this.smugTimer = Math.max(0, this.smugTimer - dt);
+
+    if (this.chugPhase === "active") {
+      const mech = mechanicFor(this.selectedBeer.style);
+      if (mech === "fill") {
+        if (space.isDown) this.fillLevel += 0.85 * dt;
+        const shown = Math.min(this.fillLevel, 1.05);
+        this.chugFillBar.width = 180 * shown;
+        this.chugMarker.x = -90 + 180 * shown;
+        const released = Phaser.Input.Keyboard.JustUp(space) && this.fillLevel > 0.05;
+        if (released || this.fillLevel > 1.05) {
+          const overflow = this.fillLevel > 1.0;
+          const accuracy = overflow
+            ? 0.08
+            : Math.max(0, 1 - Math.abs(0.92 - this.fillLevel) / 0.35);
+          this.lockBeer(accuracy, overflow);
+        }
+        return;
+      }
+      this.markerPhase += this.markerSpeed * dt;
+      if (mech === "jitter") {
+        this.jitterCd -= dt;
+        if (this.jitterCd <= 0) {
+          this.jitterCd = Phaser.Math.FloatBetween(0.25, 0.6);
+          this.markerPhase += Phaser.Math.FloatBetween(-0.9, 0.9); // pucker
+        }
+      }
+      const pos = 0.5 + 0.5 * Math.sin(this.markerPhase);
+      this.chugMarker.x = -90 + 180 * pos;
+      if (Phaser.Input.Keyboard.JustDown(space)) {
+        this.lockBeer(1 - Math.abs(pos - 0.5) * 2, false);
+      }
+      return;
+    }
+
+    // Result phase.
     if (this.resultTimer > 0) {
       this.resultTimer -= dt;
       if (this.resultTimer <= 0) {
-        this.chugPrompt.setText("SPACE: one more    ENTER: ride on");
+        this.chugPrompt.setText("SPACE: another round    ENTER: ride on");
       }
       return;
     }
-    if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+    if (Phaser.Input.Keyboard.JustDown(space)) {
       this.beerNum++;
-      this.markerSpeed *= 1.25;
-      this.chugLocked = false;
+      this.chugPhase = "pick";
+      this.chugMarker.setVisible(false);
+      this.chugSweetSpot.setVisible(false);
+      this.chugFillBar.setVisible(false);
       this.chugFeedback.setText("");
-      this.chugPrompt.setText("SPACE: slam it");
-      this.updateChugInfo();
+      this.chugPrompt.setText("< > choose your beer    SPACE: order    ENTER: ride on");
+      this.refreshTapUI();
     } else if (Phaser.Input.Keyboard.JustDown(this.enterKey)) {
       this.exitStop();
     }
@@ -861,17 +1050,25 @@ export class GameScene extends Phaser.Scene {
     this.buzz.sober(8); // adrenaline
     this.cameras.main.shake(200, 0.01);
     audio.sfx("crash");
+    this.popup(vocabLine(this.avatarId, "crash"), "#ff9a8a");
   }
 
   private endRun(finished: boolean, busted = false): void {
     this.cameras.main.setScroll(0, 0);
     const hasNext = finished && this.routeIndex < ROUTES.length - 1;
+    const quote = busted
+      ? vocabLine(this.avatarId, "bust")
+      : finished
+        ? vocabLine(this.avatarId, "finish")
+        : vocabLine(this.avatarId, "crash");
     this.scene.start("Results", {
       score: Math.floor(this.score),
       finished,
       busted,
       breweries: this.visited.size,
       routeName: this.routeDef.name,
+      riderName: AVATARS.find((a) => a.id === this.avatarId)?.name ?? "CYCLIST",
+      quote,
       nextRouteName: hasNext ? ROUTES[this.routeIndex + 1].name : undefined,
       carry: hasNext
         ? {

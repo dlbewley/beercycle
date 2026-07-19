@@ -371,6 +371,107 @@ function makeBrewery(scene: Phaser.Scene): void {
   canvas.refresh();
 }
 
+// --- Beer glassware and brewery glyphs (beercycle-bmi) -----------------
+// One texture per beer (glass shape filled with its color + foam head),
+// plus tiny white logo glyphs tinted with the brewery accent at runtime.
+
+import { ROUTES } from "../systems/routes";
+import type { BeerDef } from "../systems/beers";
+
+function drawGlass(ctx: CanvasRenderingContext2D, beer: BeerDef): void {
+  const p = (x: number, y: number, w: number, h: number, c: string) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(x, y, w, h);
+  };
+  const GLASS = "#c8d4dc";
+  switch (beer.shape) {
+    case "pint": // shaker: slight taper
+      p(3, 2, 9, 1, GLASS);
+      p(3, 2, 1, 15, GLASS);
+      p(11, 2, 1, 15, GLASS);
+      p(3, 16, 9, 1, GLASS);
+      p(4, 3, 7, 2, beer.head);
+      p(4, 5, 7, 11, beer.color);
+      break;
+    case "nonic": // straight with a bulge hint
+      p(3, 1, 9, 1, GLASS);
+      p(3, 1, 1, 16, GLASS);
+      p(11, 1, 1, 16, GLASS);
+      p(2, 5, 1, 3, GLASS); // bulge
+      p(12, 5, 1, 3, GLASS);
+      p(3, 16, 9, 1, GLASS);
+      p(4, 2, 7, 2, beer.head);
+      p(4, 4, 7, 12, beer.color);
+      break;
+    case "tulip":
+      p(2, 2, 11, 1, GLASS);
+      p(2, 2, 1, 7, GLASS);
+      p(12, 2, 1, 7, GLASS);
+      p(3, 9, 9, 1, GLASS);
+      p(3, 3, 9, 2, beer.head);
+      p(3, 5, 9, 4, beer.color);
+      p(7, 10, 1, 4, GLASS); // stem
+      p(4, 15, 7, 1, GLASS); // foot
+      break;
+    case "snifter":
+      p(2, 4, 11, 1, GLASS);
+      p(1, 5, 1, 5, GLASS);
+      p(13, 5, 1, 5, GLASS);
+      p(2, 10, 11, 1, GLASS);
+      p(3, 5, 9, 1, beer.head);
+      p(2, 6, 11, 4, beer.color);
+      p(7, 11, 1, 3, GLASS);
+      p(4, 15, 7, 1, GLASS);
+      break;
+    case "can":
+      p(4, 1, 7, 1, "#9aa0a8");
+      p(6, 0, 2, 1, "#6a7078"); // tab
+      p(3, 2, 9, 13, "#c8ccd4");
+      p(3, 6, 9, 6, beer.color); // label band
+      p(4, 15, 7, 1, "#9aa0a8");
+      break;
+  }
+}
+
+const GLYPHS: Record<string, string[]> = {
+  moon: ["..###...", ".##.....", "##......", "##......", "##......", ".##.....", "..###...", "........"],
+  diamond: ["...#....", "..###...", ".#####..", "#######.", ".#####..", "..###...", "...#....", "........"],
+  sun: ["#..#..#.", "..###...", ".#####..", "#.###.#.", ".#####..", "..###...", "#..#..#.", "........"],
+  mountain: ["........", "...#....", "..###...", ".##.##..", "..####..", ".######.", "########", "........"],
+  flower: ["..#.#...", ".#####..", "..###...", ".#####..", "..#.#...", "...#....", "...#....", "........"],
+  bird: ["........", "#.......", "##..##..", ".######.", "..####..", "...##...", "..#.....", "........"],
+  pine: ["...#....", "..###...", ".#####..", "..###...", ".#####..", "#######.", "...#....", "...#...."],
+  fire: ["...#....", "..##....", "..###...", ".####...", ".#####..", "######..", ".####...", "........"],
+  halo: [".######.", "#......#", ".######.", "........", "...##...", "..####..", "..####..", "........"],
+};
+
+function makeBeerAndGlyphTextures(scene: Phaser.Scene): void {
+  for (const route of ROUTES) {
+    for (const b of route.breweries) {
+      for (const beer of b.taps) {
+        const key = `glass_${beer.id}`;
+        if (scene.textures.exists(key)) continue;
+        const canvas = scene.textures.createCanvas(key, 15, 18)!;
+        drawGlass(canvas.getContext(), beer);
+        canvas.refresh();
+      }
+    }
+  }
+  for (const [name, rows] of Object.entries(GLYPHS)) {
+    const key = `glyph_${name}`;
+    if (scene.textures.exists(key)) continue;
+    const canvas = scene.textures.createCanvas(key, 8, 8)!;
+    const ctx = canvas.getContext();
+    ctx.fillStyle = "#ffffff";
+    rows.forEach((row, y) => {
+      for (let x = 0; x < row.length; x++) {
+        if (row[x] === "#") ctx.fillRect(x, y, 1, 1);
+      }
+    });
+    canvas.refresh();
+  }
+}
+
 // --- Player avatars: the three jokers (beercycle-uju) ------------------
 // Real-friend likenesses; canonical visual reference lives in the beads
 // epic. Portraits are 24x24, drawn in code per expression state so the
@@ -609,4 +710,5 @@ export function createGameTextures(scene: Phaser.Scene): void {
   makeBrewery(scene);
   makeAvatarTextures(scene);
   makeBikeVariants(scene);
+  makeBeerAndGlyphTextures(scene);
 }

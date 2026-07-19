@@ -16,6 +16,8 @@ interface ResultsData {
   busted?: boolean;
   breweries?: number;
   routeName?: string;
+  riderName?: string;
+  quote?: string;
   nextRouteName?: string;
   carry?: RunCarry;
 }
@@ -77,13 +79,20 @@ export class ResultsScene extends Phaser.Scene {
         .setOrigin(0.5),
       this.add
         .text(
-          0, -30,
+          0, -34,
           `Witnesses report ${breweries} brewery stop${breweries === 1 ? "" : "s"} on ${routeName}.` +
             `  ${isFinal ? "Final score" : "Score so far"}: ${score}.`,
           style("8px", FADED_INK, 320),
         )
         .setOrigin(0.5),
-      this.add.rectangle(0, -18, 340, 1, 0x1a1423),
+      this.add
+        .text(
+          0, -23,
+          data.quote ? `${data.riderName ?? "RIDER"}: "${data.quote}"` : "",
+          style("7px", FADED_INK, 320),
+        )
+        .setOrigin(0.5),
+      this.add.rectangle(0, -16, 340, 1, 0x1a1423),
       this.add.text(0, -8, "— HIGH SCORES —", style("9px", INK)).setOrigin(0.5),
       ...top.map((entry, i) => {
         const isThisRun = entry.score === score;
