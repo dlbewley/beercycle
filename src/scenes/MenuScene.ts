@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../main";
 import { getLeaderboard } from "../systems/leaderboard";
+import { audio } from "../systems/audio";
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -72,7 +73,18 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
+    this.add
+      .text(GAME_WIDTH - 6, GAME_HEIGHT - 8, "M: mute", {
+        fontFamily: "monospace",
+        fontSize: "8px",
+        color: "#7a7a7a",
+      })
+      .setOrigin(1, 0.5);
+
+    this.input.keyboard?.on("keydown-M", () => audio.toggleMute());
     this.input.keyboard?.once("keydown-SPACE", () => {
+      audio.startMusic();
+      audio.sfx("bell");
       this.scene.start("Game");
     });
   }

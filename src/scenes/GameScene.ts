@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../main";
 import { BuzzSystem } from "../systems/buzz";
 import { PEARL_ST_BREWERIES, type Brewery } from "../systems/breweries";
+import { audio } from "../systems/audio";
 
 // Core riding model: the route is a 1D distance axis (d) with a lateral
 // position (lat, 0..ROAD_WIDTH) across the road. Screen position is a
@@ -339,6 +340,7 @@ export class GameScene extends Phaser.Scene {
       .setVisible(false);
 
     this.input.keyboard!.once("keydown-ESC", () => this.endRun(false));
+    this.input.keyboard!.on("keydown-M", () => audio.toggleMute());
     this.input.keyboard!.on("keydown-P", () => {
       this.paused = !this.paused;
       this.pauseText.setVisible(this.paused);
@@ -429,6 +431,7 @@ export class GameScene extends Phaser.Scene {
 
     this.invulnTimer = Math.max(0, this.invulnTimer - dt);
     this.buzz.update(dt);
+    audio.setDetune(this.buzz.level);
     const fx = this.buzz.effects();
 
     let raw = 0;
@@ -604,6 +607,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private collect(p: Pickup): void {
+    audio.sfx("pickup");
     switch (p.kind) {
       case "water":
         this.buzz.sober(25);
@@ -645,6 +649,7 @@ export class GameScene extends Phaser.Scene {
     if (inSight && this.buzz.level >= 55 && wobbling) {
       this.suspicion += dt;
       if (this.suspicion > 1.1) {
+        audio.sfx("bust");
         this.endRun(false, true);
         return true;
       }
@@ -666,6 +671,7 @@ export class GameScene extends Phaser.Scene {
     this.chugLocked = false;
     this.resultTimer = 0;
     this.bike.rotation = 0;
+    audio.sfx("bell");
     this.chugPanel.setVisible(true);
     this.chugName.setText(b.name);
     this.chugFeedback.setText("");
@@ -692,6 +698,7 @@ export class GameScene extends Phaser.Scene {
         if (this.happyHour) points *= 2;
         this.score += points;
         this.buzz.drink(14 + 6 * this.beerNum);
+        audio.sfx(perfect ? "pour" : "chug");
         this.chugLocked = true;
         this.resultTimer = 0.8;
         this.chugFeedback.setText(perfect ? `PERFECT POUR! +${points}` : `+${points}`);
@@ -788,6 +795,7 @@ export class GameScene extends Phaser.Scene {
     this.crashTimer = 1.1;
     this.buzz.sober(8); // adrenaline
     this.cameras.main.shake(200, 0.01);
+    audio.sfx("crash");
   }
 
   private endRun(finished: boolean, busted = false): void {

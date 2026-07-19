@@ -1,0 +1,150 @@
+// Chiptune audio via raw WebAudio — no asset files. The context is
+// created lazily on the first user gesture (browser autoplay policy),
+// so every public method is safe to call at any time.
+//
+// The Buzz link: setDetune() warbles both music and SFX pitch as the
+// meter climbs, per the design doc.
+
+type SfxName = "bell" | "crash" | "pour" | "pickup" | "chug" | "bust";
+
+const BASS = [110, 110, 165, 110, 147, 110, 165, 196];
+const LEAD = [440, 523, 659, 523, 587, 494, 523, 392, 440, 523, 659, 784, 659, 587, 523, 494];
+const STEP_S = 0.22;
+
+class AudioSystem {
+  private ctx: AudioContext | null = null;
+  private musicGain: GainNode | null = null;
+  private musicTimer: number | null = null;
+  private step = 0;
+  private detuneCents = 0;
+  private muted = false;
+
+  private ensure(): AudioContext | null {
+    if (!this.ctx) {
+      try {
+        this.ctx = new AudioContext();
+      } catch {
+        return null; // no audio available; stay silent
+      }
+      this.musicGain = this.ctx.createGain();
+      this.musicGain.gain.value = 0.12;
+      this.musicGain.connect(this.ctx.destination);
+    }
+    if (this.ctx.state === "suspended") {
+      void this.ctx.resume();
+    }
+    return this.ctx;
+  }
+
+  // Buzz 0-100 → up to ~70 cents of random warble on every note.
+  setDetune(buzzLevel: number): void {
+    this.detuneCents = buzzLevel * 0.7;
+  }
+
+  toggleMute(): boolean {
+    this.muted = !this.muted;
+    if (this.musicGain) this.musicGain.gain.value = this.muted ? 0 : 0.12;
+    return this.muted;
+  }
+
+  startMusic(): void {
+    const ctx = this.ensure();
+    if (!ctx || this.musicTimer !== null) return;
+    const tick = () => {
+      if (this.muted || !this.ctx) return;
+      const t = this.ctx.currentTime + 0.05;
+      this.note(BASS[this.step % BASS.length], t, STEP_S * 0.9, "triangle", 0.2, this.musicGain!);
+      if (this.step % 2 === 0) {
+        this.note(
+          LEAD[Math.floor(this.step / 2) % LEAD.length], t, STEP_S * 1.6, "square", 0.06,
+          this.musicGain!,
+        );
+      }
+      this.step++;
+    };
+    this.musicTimer = window.setInterval(tick, STEP_S * 1000);
+  }
+
+  stopMusic(): void {
+    if (this.musicTimer !== null) {
+      clearInterval(this.musicTimer);
+      this.musicTimer = null;
+    }
+  }
+
+  sfx(name: SfxName): void {
+    const ctx = this.ensure();
+    if (!ctx || this.muted) return;
+    const t = ctx.currentTime;
+    switch (name) {
+      case "bell":
+        this.note(880, t, 0.08, "square", 0.12);
+        this.note(1320, t + 0.09, 0.12, "square", 0.1);
+        break;
+      case "crash":
+        this.noise(t, 0.3, 0.25);
+        this.note(110, t, 0.25, "sawtooth", 0.15);
+        break;
+      case "pour":
+        for (let i = 0; i < 6; i++) {
+          this.note(620 - i * 70, t + i * 0.05, 0.06, "sawtooth", 0.07);
+        }
+        break;
+      case "pickup":
+        this.note(660, t, 0.05, "square", 0.1);
+        this.note(990, t + 0.06, 0.08, "square", 0.1);
+        break;
+      case "chug":
+        this.note(220, t, 0.1, "sine", 0.16);
+        this.note(180, t + 0.1, 0.12, "sine", 0.16);
+        this.note(240, t + 0.24, 0.1, "sine", 0.14);
+        break;
+      case "bust":
+        for (let i = 0; i < 3; i++) {
+          this.note(700, t + i * 0.3, 0.14, "square", 0.12);
+          this.note(500, t + i * 0.3 + 0.15, 0.14, "square", 0.12);
+        }
+        break;
+    }
+  }
+
+  private note(
+    freq: number,
+    t: number,
+    dur: number,
+    type: OscillatorType,
+    gain: number,
+    dest?: AudioNode,
+  ): void {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    osc.detune.value = (Math.random() * 2 - 1) * this.detuneCents;
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(g);
+    g.connect(dest ?? ctx.destination);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+  }
+
+  private noise(t: number, dur: number, gain: number): void {
+    const ctx = this.ctx!;
+    const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    src.connect(g);
+    g.connect(ctx.destination);
+    src.start(t);
+  }
+}
+
+export const audio = new AudioSystem();
