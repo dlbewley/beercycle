@@ -39,6 +39,40 @@ interface Fixture {
   obj: Phaser.GameObjects.Container | Phaser.GameObjects.Rectangle;
 }
 
+// Moving Boulder hazards: pedestrians wander laterally, dogs cut across.
+type NpcKind = "ped" | "dog" | "goose" | "door";
+
+interface Npc {
+  kind: NpcKind;
+  d: number;
+  lat: number;
+  latDir: number;
+  latVel: number; // world units/s of lateral wander
+  span: number;
+  grazed: boolean; // came close enough for style points
+  passed: boolean;
+  obj: Phaser.GameObjects.Shape | Phaser.GameObjects.Container;
+}
+
+type PickupKind = "water" | "taco" | "tube" | "token" | "booch";
+
+interface Pickup {
+  kind: PickupKind;
+  d: number;
+  lat: number;
+  span: number;
+  obj: Phaser.GameObjects.Shape | Phaser.GameObjects.Container;
+}
+
+// Boulder PD watches stretches of the route: wobble past one at high
+// Buzz for long enough and the run ends in a BUI citation.
+interface Cop {
+  d: number;
+  lat: number;
+  obj: Phaser.GameObjects.Container;
+  alert: Phaser.GameObjects.Text;
+}
+
 interface SteerSample {
   t: number;
   v: number;
@@ -66,6 +100,12 @@ export class GameScene extends Phaser.Scene {
   private crashTimer = 0;
   private invulnTimer = 0;
   private steerHistory: SteerSample[] = [];
+
+  private npcs: Npc[] = [];
+  private pickups: Pickup[] = [];
+  private cops: Cop[] = [];
+  private suspicion = 0;
+  private happyHour = false;
 
   // Brewery stop state.
   private visited = new Set<string>();
@@ -107,6 +147,11 @@ export class GameScene extends Phaser.Scene {
     this.invulnTimer = 0;
     this.visited = new Set();
     this.streak = 0;
+    this.npcs = [];
+    this.pickups = [];
+    this.cops = [];
+    this.suspicion = 0;
+    this.happyHour = false;
 
     // Grass oversized so camera sway never reveals the void.
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 700, 500, 0x4a6741).setDepth(-30);
@@ -155,6 +200,71 @@ export class GameScene extends Phaser.Scene {
       const zone = this.add.rectangle(0, 0, 42, 24, 0xf7b32b, 0.28).setRotation(ROAD_ANGLE);
       this.fixtures.push({ d: b.d, lat: buildingLat, obj: building });
       this.fixtures.push({ d: b.d, lat: zoneLat, obj: zone });
+    }
+
+    // Moving hazards. Pedestrians wander the road, dogs bolt across,
+    // geese hold their ground, car doors swing open near the curb.
+    const npcSpecs: Array<{ kind: NpcKind; count: number; gap: number; latVel: number }> = [
+      { kind: "ped", count: 4, gap: 340, latVel: 12 },
+      { kind: "dog", count: 2, gap: 750, latVel: 42 },
+      { kind: "goose", count: 2, gap: 830, latVel: 4 },
+      { kind: "door", count: 2, gap: 910, latVel: 0 },
+    ];
+    let stagger = 500;
+    for (const spec of npcSpecs) {
+      for (let i = 0; i < spec.count; i++) {
+        this.npcs.push({
+          kind: spec.kind,
+          d: stagger + i * spec.gap,
+          lat: this.npcLat(spec.kind),
+          latDir: Math.random() < 0.5 ? -1 : 1,
+          latVel: spec.latVel,
+          span: spec.count * spec.gap,
+          grazed: false,
+          passed: false,
+          obj: this.makeNpcSprite(spec.kind),
+        });
+      }
+      stagger += 130;
+    }
+
+    // Pickups. Water and tacos sober you up, a spare tube is a life,
+    // the happy-hour token doubles the next brewery stop, kombucha is
+    // a gamble.
+    const pickupSpecs: Array<{ kind: PickupKind; count: number; gap: number }> = [
+      { kind: "water", count: 3, gap: 950 },
+      { kind: "taco", count: 2, gap: 1400 },
+      { kind: "tube", count: 1, gap: 2900 },
+      { kind: "token", count: 1, gap: 2300 },
+      { kind: "booch", count: 2, gap: 1150 },
+    ];
+    stagger = 650;
+    for (const spec of pickupSpecs) {
+      for (let i = 0; i < spec.count; i++) {
+        this.pickups.push({
+          kind: spec.kind,
+          d: stagger + i * spec.gap,
+          lat: Phaser.Math.FloatBetween(14, ROAD_WIDTH - 14),
+          span: spec.count * spec.gap,
+          obj: this.makePickupSprite(spec.kind),
+        });
+      }
+      stagger += 170;
+    }
+
+    // Boulder PD posts up on the shoulder along the route.
+    for (const copD of [1850 + Phaser.Math.Between(-200, 200), 3500 + Phaser.Math.Between(-200, 200)]) {
+      const side = Math.random() < 0.5 ? -18 : ROAD_WIDTH + 18;
+      const alert = this.add
+        .text(0, -18, "!", { fontFamily: "monospace", fontSize: "12px", color: "#ff5555" })
+        .setOrigin(0.5)
+        .setVisible(false);
+      const obj = this.add.container(0, 0, [
+        this.add.rectangle(0, 0, 9, 16, 0x27408b),
+        this.add.rectangle(0, -9, 11, 3, 0x14205c), // hat brim
+        alert,
+      ]);
+      this.cops.push({ d: copD, lat: side, obj, alert });
     }
 
     const body = this.add.rectangle(0, 0, 10, 18, 0xf7b32b);
@@ -345,6 +455,14 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    if (this.updateNpcs(dt)) {
+      this.layoutWorld();
+      return;
+    }
+    this.updatePickups();
+    const wobbling = Math.abs(fx.steerDrift) > 35 || fx.mirrored;
+    if (this.updateCops(dt, wobbling)) return;
+
     this.bike.rotation = steer * 0.15;
     this.bike.setPosition(
       ANCHOR.x,
@@ -357,6 +475,166 @@ export class GameScene extends Phaser.Scene {
 
     this.layoutWorld();
     this.refreshHud();
+  }
+
+  // --- NPCs, pickups, and the law --------------------------------------
+
+  private npcLat(kind: NpcKind): number {
+    if (kind === "door") return Math.random() < 0.5 ? 8 : ROAD_WIDTH - 8;
+    return Phaser.Math.FloatBetween(14, ROAD_WIDTH - 14);
+  }
+
+  private makeNpcSprite(kind: NpcKind): Npc["obj"] {
+    switch (kind) {
+      case "ped":
+        return this.add.container(0, 0, [
+          this.add.rectangle(0, 0, 8, 13, 0xd9a066),
+          this.add.rectangle(0, -8, 6, 5, 0xc98a5a), // head
+        ]);
+      case "dog":
+        return this.add.container(0, 0, [
+          this.add.rectangle(0, 0, 12, 6, 0x8b5a2b),
+          this.add.rectangle(7, -3, 4, 4, 0x8b5a2b), // head
+        ]);
+      case "goose":
+        return this.add.container(0, 0, [
+          this.add.rectangle(0, 0, 8, 7, 0xe8e4d8),
+          this.add.rectangle(4, -6, 2, 6, 0x2b2b2b), // neck
+        ]);
+      case "door":
+        return this.add.rectangle(0, 0, 5, 16, 0xc0c8d0);
+    }
+  }
+
+  private makePickupSprite(kind: PickupKind): Pickup["obj"] {
+    switch (kind) {
+      case "water":
+        return this.add.rectangle(0, 0, 6, 10, 0x5ab9d9);
+      case "taco":
+        return this.add.triangle(0, 0, 0, 0, 10, 0, 5, 7, 0xe8c56a);
+      case "tube":
+        return this.add.container(0, 0, [
+          this.add.rectangle(0, 0, 10, 10, 0x2b2b2b),
+          this.add.rectangle(0, 0, 4, 4, 0x4a6741),
+        ]);
+      case "token":
+        return this.add.container(0, 0, [
+          this.add.rectangle(0, 0, 9, 9, 0xf7b32b).setAngle(45),
+          this.add.text(0, 0, "2", { fontFamily: "monospace", fontSize: "7px", color: "#14101c" }).setOrigin(0.5),
+        ]);
+      case "booch":
+        return this.add.rectangle(0, 0, 6, 11, 0xc77dff);
+    }
+  }
+
+  private popup(text: string, color: string): void {
+    const t = this.add
+      .text(ANCHOR.x, ANCHOR.y - 20, text, { fontFamily: "monospace", fontSize: "9px", color })
+      .setOrigin(0.5)
+      .setDepth(999);
+    this.tweens.add({
+      targets: t,
+      y: ANCHOR.y - 48,
+      alpha: 0,
+      duration: 900,
+      onComplete: () => t.destroy(),
+    });
+  }
+
+  private updateNpcs(dt: number): boolean {
+    for (const n of this.npcs) {
+      if (n.latVel > 0) {
+        n.lat += n.latVel * n.latDir * dt;
+        if (n.lat < 6 || n.lat > ROAD_WIDTH - 6) n.latDir *= -1;
+      }
+      while (n.d < this.d - 100) {
+        n.d += n.span;
+        n.lat = this.npcLat(n.kind);
+        n.grazed = false;
+        n.passed = false;
+      }
+      const dd = Math.abs(n.d - this.d);
+      const dl = Math.abs(n.lat - this.lat);
+      if (dd < 10) {
+        if (dl < 9 && this.invulnTimer <= 0) {
+          this.crash();
+          return true;
+        }
+        if (dl < 20) n.grazed = true;
+      }
+      if (!n.passed && n.d < this.d - 12) {
+        n.passed = true;
+        if (n.grazed) {
+          this.score += 30;
+          this.popup("+30 CLOSE ONE", "#8fd694");
+        }
+      }
+    }
+    return false;
+  }
+
+  private updatePickups(): void {
+    for (const p of this.pickups) {
+      while (p.d < this.d - 100) {
+        p.d += p.span;
+        p.lat = Phaser.Math.FloatBetween(14, ROAD_WIDTH - 14);
+      }
+      if (Math.abs(p.d - this.d) < 12 && Math.abs(p.lat - this.lat) < 10) {
+        this.collect(p);
+        p.d += p.span; // consume: recycle far ahead
+      }
+    }
+  }
+
+  private collect(p: Pickup): void {
+    switch (p.kind) {
+      case "water":
+        this.buzz.sober(25);
+        this.popup("WATER  BUZZ -25", "#5ab9d9");
+        break;
+      case "taco":
+        this.buzz.sober(15);
+        this.score += 25;
+        this.popup("TACO  +25, BUZZ -15", "#e8c56a");
+        break;
+      case "tube":
+        this.lives++;
+        this.popup("SPARE TUBE  +1 LIFE", "#8fd694");
+        break;
+      case "token":
+        this.happyHour = true;
+        this.popup("HAPPY HOUR  NEXT STOP 2X", "#f7b32b");
+        break;
+      case "booch":
+        if (Math.random() < 0.5) {
+          this.buzz.sober(20);
+          this.popup("KOMBUCHA  CLARITY, BUZZ -20", "#c77dff");
+        } else {
+          this.buzz.drink(12);
+          this.popup("KOMBUCHA  IT'S FERMENTED +12", "#c77dff");
+        }
+        break;
+    }
+  }
+
+  // Returns true if the run just ended in a citation.
+  private updateCops(dt: number, wobbling: boolean): boolean {
+    let inSight = false;
+    for (const c of this.cops) {
+      const watching = Math.abs(c.d - this.d) < 130;
+      inSight ||= watching;
+      c.alert.setVisible(watching && this.suspicion > 0.2);
+    }
+    if (inSight && this.buzz.level >= 55 && wobbling) {
+      this.suspicion += dt;
+      if (this.suspicion > 1.1) {
+        this.endRun(false, true);
+        return true;
+      }
+    } else {
+      this.suspicion = Math.max(0, this.suspicion - dt * 0.8);
+    }
+    return false;
   }
 
   // --- Brewery stop minigame -------------------------------------------
@@ -379,7 +657,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateChugInfo(): void {
-    this.chugInfo.setText(`BEER #${this.beerNum}   STREAK x${this.streak}`);
+    this.chugInfo.setText(
+      `BEER #${this.beerNum}   STREAK x${this.streak}${this.happyHour ? "   HAPPY HOUR 2X" : ""}`,
+    );
   }
 
   private chugUpdate(dt: number): void {
@@ -392,6 +672,7 @@ export class GameScene extends Phaser.Scene {
         const perfect = accuracy > 0.85;
         let points = Math.round((80 + 120 * accuracy) * this.streak);
         if (perfect) points = Math.round(points * 1.5);
+        if (this.happyHour) points *= 2;
         this.score += points;
         this.buzz.drink(14 + 6 * this.beerNum);
         this.chugLocked = true;
@@ -422,6 +703,7 @@ export class GameScene extends Phaser.Scene {
 
   private exitStop(): void {
     this.mode = "riding";
+    this.happyHour = false;
     this.chugPanel.setVisible(false);
     this.speed = MIN_SPEED;
     this.invulnTimer = 1;
@@ -451,6 +733,15 @@ export class GameScene extends Phaser.Scene {
     }
     for (const f of this.fixtures) {
       this.place(f.obj, f.d, f.lat);
+    }
+    for (const n of this.npcs) {
+      this.place(n.obj, n.d, n.lat);
+    }
+    for (const p of this.pickups) {
+      this.place(p.obj, p.d, p.lat);
+    }
+    for (const c of this.cops) {
+      this.place(c.obj, c.d, c.lat);
     }
   }
 
@@ -486,11 +777,12 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.shake(200, 0.01);
   }
 
-  private endRun(finished: boolean): void {
+  private endRun(finished: boolean, busted = false): void {
     this.cameras.main.setScroll(0, 0);
     this.scene.start("Results", {
       score: Math.floor(this.score),
       finished,
+      busted,
       breweries: this.visited.size,
     });
   }

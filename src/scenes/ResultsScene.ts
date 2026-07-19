@@ -11,10 +11,12 @@ const FADED_INK = "#4a4438";
 interface ResultsData {
   score?: number;
   finished?: boolean;
+  busted?: boolean;
   breweries?: number;
 }
 
-function headline(finished: boolean, breweries: number): string {
+function headline(finished: boolean, breweries: number, busted: boolean): string {
+  if (busted) return "CYCLIST CITED FOR BUI ON PEARL ST";
   if (finished && breweries >= 3) return "CYCLIST SWEEPS PEARL ST PUB CRAWL";
   if (finished && breweries > 0) return "CYCLIST WOBBLES HOME HAPPY";
   if (finished) return "SOBER CYCLIST SETS COURSE RECORD";
@@ -30,6 +32,7 @@ export class ResultsScene extends Phaser.Scene {
     const score = data.score ?? 0;
     const breweries = data.breweries ?? 0;
     const finished = data.finished ?? false;
+    const busted = data.busted ?? false;
 
     const board = getLeaderboard();
     board.submit({ name: "CYC", score, date: new Date().toISOString() });
@@ -52,7 +55,7 @@ export class ResultsScene extends Phaser.Scene {
         .setOrigin(0.5, 0),
       this.add.rectangle(0, -72, 340, 1, 0x1a1423),
       this.add
-        .text(0, -56, headline(finished, breweries), style("13px", INK, 340))
+        .text(0, -56, headline(finished, breweries, busted), style("13px", INK, 340))
         .setOrigin(0.5),
       this.add
         .text(
