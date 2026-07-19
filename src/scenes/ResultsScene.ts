@@ -2,41 +2,89 @@ import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../main";
 import { getLeaderboard } from "../systems/leaderboard";
 
-// End-of-run tally. Will become the Daily Camera headline screen
-// (beercycle-chx); for now it records the score and loops to the menu.
+// End-of-run tally styled as a local-paper front page (Paperboy's
+// spinning-headline homage). Parody masthead, no real-paper branding.
+
+const INK = "#1a1423";
+const FADED_INK = "#4a4438";
+
+interface ResultsData {
+  score?: number;
+  finished?: boolean;
+  breweries?: number;
+}
+
+function headline(finished: boolean, breweries: number): string {
+  if (finished && breweries >= 3) return "CYCLIST SWEEPS PEARL ST PUB CRAWL";
+  if (finished && breweries > 0) return "CYCLIST WOBBLES HOME HAPPY";
+  if (finished) return "SOBER CYCLIST SETS COURSE RECORD";
+  return "BICYCLE MISHAP SNARLS PEARL ST";
+}
+
 export class ResultsScene extends Phaser.Scene {
   constructor() {
     super("Results");
   }
 
-  create(data: { score?: number; finished?: boolean }): void {
+  create(data: ResultsData): void {
     const score = data.score ?? 0;
-    getLeaderboard().submit({ name: "CYC", score, date: new Date().toISOString() });
+    const breweries = data.breweries ?? 0;
+    const finished = data.finished ?? false;
 
-    const cx = GAME_WIDTH / 2;
-    this.add
-      .text(cx, GAME_HEIGHT / 2 - 20, data.finished ? "MADE IT HOME" : "RIDE OVER", {
-        fontFamily: "monospace",
-        fontSize: "24px",
-        color: "#f7b32b",
-      })
-      .setOrigin(0.5);
+    const board = getLeaderboard();
+    board.submit({ name: "CYC", score, date: new Date().toISOString() });
+    const top = board.getTop(5);
 
-    this.add
-      .text(cx, GAME_HEIGHT / 2 + 10, `SCORE ${score}`, {
-        fontFamily: "monospace",
-        fontSize: "14px",
-        color: "#ffffff",
-      })
-      .setOrigin(0.5);
+    const style = (size: string, color: string, wrap?: number) => ({
+      fontFamily: "monospace",
+      fontSize: size,
+      color,
+      align: "center" as const,
+      ...(wrap ? { wordWrap: { width: wrap } } : {}),
+    });
 
-    this.add
-      .text(cx, GAME_HEIGHT - 40, "PRESS SPACE FOR MENU", {
-        fontFamily: "monospace",
-        fontSize: "10px",
-        color: "#cfcfcf",
-      })
-      .setOrigin(0.5);
+    const paper = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2, [
+      this.add.rectangle(0, 0, 380, 230, 0xf2ead8).setStrokeStyle(2, 0x1a1423),
+      this.add.text(0, -98, "THE BOULDER BUGLE", style("16px", INK)).setOrigin(0.5),
+      this.add.rectangle(0, -86, 340, 1, 0x1a1423),
+      this.add
+        .text(0, -84, "BOULDER'S SECOND-MOST-TRUSTED NEWS SOURCE  *  25¢", style("6px", FADED_INK))
+        .setOrigin(0.5, 0),
+      this.add.rectangle(0, -72, 340, 1, 0x1a1423),
+      this.add
+        .text(0, -56, headline(finished, breweries), style("13px", INK, 340))
+        .setOrigin(0.5),
+      this.add
+        .text(
+          0, -30,
+          `Witnesses report ${breweries} of 3 brewery stops.  Final score: ${score}.`,
+          style("8px", FADED_INK, 320),
+        )
+        .setOrigin(0.5),
+      this.add.rectangle(0, -18, 340, 1, 0x1a1423),
+      this.add.text(0, -8, "— HIGH SCORES —", style("9px", INK)).setOrigin(0.5),
+      ...top.map((entry, i) => {
+        const isThisRun = entry.score === score;
+        return this.add
+          .text(
+            0, 8 + i * 12,
+            `${i + 1}. ${entry.name}  ${String(entry.score).padStart(6, ".")}${isThisRun ? "  <" : ""}`,
+            style("9px", isThisRun ? "#8a2b2b" : FADED_INK),
+          )
+          .setOrigin(0.5);
+      }),
+      this.add.text(0, 96, "PRESS SPACE FOR MENU", style("9px", INK)).setOrigin(0.5),
+    ]);
+
+    // Paperboy-style spin-in.
+    paper.setScale(0.05).setAngle(720);
+    this.tweens.add({
+      targets: paper,
+      scale: 1,
+      angle: 0,
+      duration: 700,
+      ease: "Cubic.easeOut",
+    });
 
     this.input.keyboard?.once("keydown-SPACE", () => {
       this.scene.start("Menu");

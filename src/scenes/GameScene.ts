@@ -56,6 +56,8 @@ export class GameScene extends Phaser.Scene {
   private vignette!: Phaser.GameObjects.Image;
 
   private mode: "riding" | "chugging" = "riding";
+  private paused = false;
+  private pauseText!: Phaser.GameObjects.Text;
   private d = 0;
   private lat = ROAD_WIDTH / 2;
   private speed = MIN_SPEED;
@@ -184,7 +186,25 @@ export class GameScene extends Phaser.Scene {
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.enterKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+    this.paused = false;
+    this.pauseText = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, "PAUSED", {
+        fontFamily: "monospace",
+        fontSize: "20px",
+        color: "#ffffff",
+        backgroundColor: "#14101c",
+        padding: { x: 10, y: 6 },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(1003)
+      .setVisible(false);
+
     this.input.keyboard!.once("keydown-ESC", () => this.endRun(false));
+    this.input.keyboard!.on("keydown-P", () => {
+      this.paused = !this.paused;
+      this.pauseText.setVisible(this.paused);
+    });
     if (import.meta.env.DEV) {
       this.input.keyboard!.on("keydown-B", () => this.buzz.drink(15));
       this.input.keyboard!.on("keydown-N", () => this.buzz.sober(15));
@@ -241,6 +261,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    if (this.paused) return;
     const dt = Math.min(delta / 1000, 0.05);
     const now = this.time.now;
 
