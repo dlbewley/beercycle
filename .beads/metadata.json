@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "beercycle",
+  "project_id": "feca783d-e076-43b3-9db4-59e08776936b"
+}
