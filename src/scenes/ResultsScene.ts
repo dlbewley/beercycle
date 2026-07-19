@@ -9,13 +9,13 @@ export class ResultsScene extends Phaser.Scene {
     super("Results");
   }
 
-  create(data: { score?: number }): void {
+  create(data: { score?: number; finished?: boolean }): void {
     const score = data.score ?? 0;
     getLeaderboard().submit({ name: "CYC", score, date: new Date().toISOString() });
 
     const cx = GAME_WIDTH / 2;
     this.add
-      .text(cx, GAME_HEIGHT / 2 - 20, "RIDE OVER", {
+      .text(cx, GAME_HEIGHT / 2 - 20, data.finished ? "MADE IT HOME" : "RIDE OVER", {
         fontFamily: "monospace",
         fontSize: "24px",
         color: "#f7b32b",
