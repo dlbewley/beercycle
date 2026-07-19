@@ -25,6 +25,13 @@ const game = new Phaser.Game({
   scene: [BootScene, MenuScene, GameScene, ResultsScene],
 });
 
+// The FIT scaler can size against a zero-height parent when the page
+// boots in a hidden/background tab; refresh once it becomes visible.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) game.scale.refresh();
+});
+window.addEventListener("load", () => game.scale.refresh());
+
 // Dev-only handle for poking at the running game from the console.
 declare global {
   interface Window {

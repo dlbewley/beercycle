@@ -21,14 +21,19 @@ const OFFROAD_SPEED_CAP = 65;
 const STEER_SPEED = 95;
 const START_LIVES = 3;
 
-type PropKind = "stripe" | "curb" | "cone";
+type WorldObj =
+  | Phaser.GameObjects.Shape
+  | Phaser.GameObjects.Image
+  | Phaser.GameObjects.Container;
+
+type PropKind = "stripe" | "curb" | "cone" | "deco";
 
 interface Prop {
   kind: PropKind;
   d: number;
   lat: number;
   span: number; // distance after which the prop recycles ahead
-  obj: Phaser.GameObjects.Shape;
+  obj: WorldObj;
 }
 
 // Fixed roadside set dressing (brewery buildings, stop zones): projected
@@ -51,7 +56,7 @@ interface Npc {
   span: number;
   grazed: boolean; // came close enough for style points
   passed: boolean;
-  obj: Phaser.GameObjects.Shape | Phaser.GameObjects.Container;
+  obj: Phaser.GameObjects.Image;
 }
 
 type PickupKind = "water" | "taco" | "tube" | "token" | "booch";
@@ -61,7 +66,7 @@ interface Pickup {
   d: number;
   lat: number;
   span: number;
-  obj: Phaser.GameObjects.Shape | Phaser.GameObjects.Container;
+  obj: Phaser.GameObjects.Image;
 }
 
 // Boulder PD watches stretches of the route: wobble past one at high
@@ -86,8 +91,11 @@ export class GameScene extends Phaser.Scene {
   private props: Prop[] = [];
   private fixtures: Fixture[] = [];
   private road!: Phaser.GameObjects.Rectangle;
-  private bike!: Phaser.GameObjects.Container;
+  private bike!: Phaser.GameObjects.Image;
   private vignette!: Phaser.GameObjects.Image;
+  private flatirons!: Phaser.GameObjects.Image;
+  private clouds: Phaser.GameObjects.Image[] = [];
+  private pedalTimer = 0;
 
   private mode: "riding" | "chugging" = "riding";
   private paused = false;
@@ -155,6 +163,21 @@ export class GameScene extends Phaser.Scene {
 
     // Grass oversized so camera sway never reveals the void.
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 700, 500, 0x4a6741).setDepth(-30);
+
+    // Horizon strip: sky, drifting clouds, and the Flatirons (west, as
+    // they should be). The road overlaps it as it exits the top — the
+    // street "runs into" the horizon, Paperboy-style.
+    this.add.image(0, 0, "sky").setOrigin(0).setScrollFactor(0).setDepth(-29);
+    this.flatirons = this.add
+      .image(10, 64, "flatirons")
+      .setOrigin(0, 1)
+      .setScrollFactor(0)
+      .setDepth(-28);
+    this.clouds = [
+      this.add.image(90, 14, "cloud").setScrollFactor(0).setDepth(-27),
+      this.add.image(260, 26, "cloud").setScrollFactor(0).setDepth(-27).setScale(0.7),
+    ];
+
     this.road = this.add
       .rectangle(0, 0, 1500, ROAD_WIDTH, 0x3b3b45)
       .setRotation(ROAD_ANGLE)
@@ -172,16 +195,28 @@ export class GameScene extends Phaser.Scene {
         this.props.push({ kind: "curb", d: i * 35, lat, span: 350, obj });
       }
     }
-    // A few traffic cones as stand-in obstacles; the real obstacle set is
-    // beercycle-ydf.
+    // Traffic cones on the road.
     for (let i = 0; i < 5; i++) {
-      const obj = this.add.triangle(0, 0, 0, 10, 4, 0, 8, 10, 0xff7f2a);
       this.props.push({
         kind: "cone",
         d: 400 + i * 320,
         lat: Phaser.Math.FloatBetween(12, ROAD_WIDTH - 12),
         span: 1600,
-        obj,
+        obj: this.add.image(0, 0, "cone"),
+      });
+    }
+
+    // Roadside greenery on both grass banks.
+    const decoKeys = ["tree", "tree", "bush", "flowers"];
+    for (let i = 0; i < 14; i++) {
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const latBase = side < 0 ? -46 : ROAD_WIDTH + 46;
+      this.props.push({
+        kind: "deco",
+        d: i * 95,
+        lat: latBase + side * Phaser.Math.FloatBetween(0, 55),
+        span: 14 * 95,
+        obj: this.add.image(0, 0, decoKeys[i % decoKeys.length]).setOrigin(0.5, 1),
       });
     }
 
@@ -190,12 +225,10 @@ export class GameScene extends Phaser.Scene {
       const buildingLat = b.side === "left" ? -40 : ROAD_WIDTH + 40;
       const zoneLat = b.side === "left" ? 8 : ROAD_WIDTH - 8;
       const building = this.add.container(0, 0, [
-        this.add.rectangle(0, 0, 34, 26, 0x6b4226),
-        this.add.rectangle(0, -16, 40, 8, 0x2b1a10),
+        this.add.image(0, 0, "brewery"),
         this.add
-          .text(0, -16, b.name, { fontFamily: "monospace", fontSize: "7px", color: "#f7e8b0" })
+          .text(0, -13, b.name, { fontFamily: "monospace", fontSize: "7px", color: "#f7e8b0" })
           .setOrigin(0.5),
-        this.add.rectangle(0, 6, 8, 12, 0x2b1a10), // door
       ]);
       const zone = this.add.rectangle(0, 0, 42, 24, 0xf7b32b, 0.28).setRotation(ROAD_ANGLE);
       this.fixtures.push({ d: b.d, lat: buildingLat, obj: building });
@@ -259,17 +292,12 @@ export class GameScene extends Phaser.Scene {
         .text(0, -18, "!", { fontFamily: "monospace", fontSize: "12px", color: "#ff5555" })
         .setOrigin(0.5)
         .setVisible(false);
-      const obj = this.add.container(0, 0, [
-        this.add.rectangle(0, 0, 9, 16, 0x27408b),
-        this.add.rectangle(0, -9, 11, 3, 0x14205c), // hat brim
-        alert,
-      ]);
+      const obj = this.add.container(0, 0, [this.add.image(0, 0, "cop"), alert]);
       this.cops.push({ d: copD, lat: side, obj, alert });
     }
 
-    const body = this.add.rectangle(0, 0, 10, 18, 0xf7b32b);
-    const helmet = this.add.rectangle(0, -7, 6, 4, 0xf7f7e8);
-    this.bike = this.add.container(ANCHOR.x, ANCHOR.y, [body, helmet]).setDepth(ANCHOR.y);
+    this.bike = this.add.image(ANCHOR.x, ANCHOR.y, "bike_a").setDepth(ANCHOR.y);
+    this.pedalTimer = 0;
 
     if (!this.textures.exists("vignette")) {
       const canvas = this.textures.createCanvas("vignette", GAME_WIDTH, GAME_HEIGHT)!;
@@ -470,6 +498,20 @@ export class GameScene extends Phaser.Scene {
     );
     this.bike.setAlpha(this.invulnTimer > 0 ? (Math.sin(now * 0.03) > 0 ? 0.3 : 1) : 1);
 
+    // Pedal animation, cadence tied to speed.
+    this.pedalTimer += dt * (forward / 60);
+    if (this.pedalTimer > 0.18) {
+      this.pedalTimer = 0;
+      this.bike.setTexture(this.bike.texture.key === "bike_a" ? "bike_b" : "bike_a");
+    }
+
+    // Backdrop life: subtle Flatirons parallax, drifting clouds.
+    this.flatirons.x = 10 - (this.lat - ROAD_WIDTH / 2) * 0.18;
+    for (const c of this.clouds) {
+      c.x -= (c.scale < 1 ? 2 : 3.2) * dt;
+      if (c.x < -20) c.x = GAME_WIDTH + 20;
+    }
+
     this.cameras.main.setScroll(fx.sway, fx.sway * 0.4);
     this.vignette.setAlpha(fx.vignette * 0.85);
 
@@ -487,44 +529,18 @@ export class GameScene extends Phaser.Scene {
   private makeNpcSprite(kind: NpcKind): Npc["obj"] {
     switch (kind) {
       case "ped":
-        return this.add.container(0, 0, [
-          this.add.rectangle(0, 0, 8, 13, 0xd9a066),
-          this.add.rectangle(0, -8, 6, 5, 0xc98a5a), // head
-        ]);
+        return this.add.image(0, 0, Math.random() < 0.5 ? "ped_a" : "ped_b");
       case "dog":
-        return this.add.container(0, 0, [
-          this.add.rectangle(0, 0, 12, 6, 0x8b5a2b),
-          this.add.rectangle(7, -3, 4, 4, 0x8b5a2b), // head
-        ]);
+        return this.add.image(0, 0, "dog");
       case "goose":
-        return this.add.container(0, 0, [
-          this.add.rectangle(0, 0, 8, 7, 0xe8e4d8),
-          this.add.rectangle(4, -6, 2, 6, 0x2b2b2b), // neck
-        ]);
+        return this.add.image(0, 0, "goose");
       case "door":
-        return this.add.rectangle(0, 0, 5, 16, 0xc0c8d0);
+        return this.add.image(0, 0, "car_door");
     }
   }
 
   private makePickupSprite(kind: PickupKind): Pickup["obj"] {
-    switch (kind) {
-      case "water":
-        return this.add.rectangle(0, 0, 6, 10, 0x5ab9d9);
-      case "taco":
-        return this.add.triangle(0, 0, 0, 0, 10, 0, 5, 7, 0xe8c56a);
-      case "tube":
-        return this.add.container(0, 0, [
-          this.add.rectangle(0, 0, 10, 10, 0x2b2b2b),
-          this.add.rectangle(0, 0, 4, 4, 0x4a6741),
-        ]);
-      case "token":
-        return this.add.container(0, 0, [
-          this.add.rectangle(0, 0, 9, 9, 0xf7b32b).setAngle(45),
-          this.add.text(0, 0, "2", { fontFamily: "monospace", fontSize: "7px", color: "#14101c" }).setOrigin(0.5),
-        ]);
-      case "booch":
-        return this.add.rectangle(0, 0, 6, 11, 0xc77dff);
-    }
+    return this.add.image(0, 0, kind); // texture keys match pickup kinds
   }
 
   private popup(text: string, color: string): void {
@@ -546,6 +562,7 @@ export class GameScene extends Phaser.Scene {
       if (n.latVel > 0) {
         n.lat += n.latVel * n.latDir * dt;
         if (n.lat < 6 || n.lat > ROAD_WIDTH - 6) n.latDir *= -1;
+        n.obj.setFlipX(n.latDir < 0);
       }
       while (n.d < this.d - 100) {
         n.d += n.span;
@@ -745,11 +762,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private place(
-    obj: Phaser.GameObjects.Container | Phaser.GameObjects.Shape,
-    d: number,
-    lat: number,
-  ): void {
+  private place(obj: WorldObj, d: number, lat: number): void {
     const rel = d - this.d;
     const latOff = lat - this.lat;
     const sx = ANCHOR.x + CROSS.x * latOff + FORWARD.x * rel;

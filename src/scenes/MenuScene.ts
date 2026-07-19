@@ -10,6 +10,25 @@ export class MenuScene extends Phaser.Scene {
   create(): void {
     const cx = GAME_WIDTH / 2;
 
+    // Dusk-toned Flatirons silhouette behind the title.
+    this.add
+      .image(cx, GAME_HEIGHT - 30, "flatirons")
+      .setOrigin(0.5, 1)
+      .setScale(1.5)
+      .setTint(0x3a3a55)
+      .setAlpha(0.9);
+    this.add.rectangle(cx, GAME_HEIGHT - 15, GAME_WIDTH, 30, 0x232338);
+
+    const bike = this.add.image(cx, GAME_HEIGHT - 38, "bike_a").setScale(2);
+    this.tweens.add({
+      targets: bike,
+      y: GAME_HEIGHT - 42,
+      duration: 700,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+
     this.add
       .text(cx, 60, "BEERCYCLE", {
         fontFamily: "monospace",
