@@ -1,4 +1,4 @@
-// Pearl Street route breweries (parody roster, docs/GAME_DESIGN.md).
+// Brewery stop shape shared by the route definitions (src/systems/routes.ts).
 // d is route distance; side is which road edge the stop zone sits on.
 
 export interface Brewery {
@@ -6,9 +6,3 @@ export interface Brewery {
   d: number;
   side: "left" | "right";
 }
-
-export const PEARL_ST_BREWERIES: Brewery[] = [
-  { name: "MOUNTAIN MOON", d: 1200, side: "left" },
-  { name: "BEST FLANDERS", d: 2700, side: "right" },
-  { name: "BOLDER BEER CO.", d: 4200, side: "left" },
-];

@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../main";
 import { BuzzSystem } from "../systems/buzz";
-import { PEARL_ST_BREWERIES, type Brewery } from "../systems/breweries";
+import { type Brewery } from "../systems/breweries";
+import { ROUTES, type RouteDef } from "../systems/routes";
 import { audio } from "../systems/audio";
 
 // Core riding model: the route is a 1D distance axis (d) with a lateral
@@ -15,7 +16,6 @@ const ROAD_ANGLE = Math.atan2(FORWARD.y, FORWARD.x);
 const ROAD_WIDTH = 130;
 const SHOULDER = 28; // rideable grass strip before the crash boundary
 const ANCHOR = new Phaser.Math.Vector2(150, 185); // bike's screen position
-const ROUTE_LENGTH = 5000;
 const MIN_SPEED = 50;
 const MAX_SPEED = 190;
 const OFFROAD_SPEED_CAP = 65;
@@ -84,6 +84,15 @@ interface SteerSample {
   v: number;
 }
 
+// State carried between routes on a multi-route run.
+export interface RunCarry {
+  routeIndex?: number;
+  score?: number;
+  lives?: number;
+  buzz?: number;
+  streak?: number;
+}
+
 export class GameScene extends Phaser.Scene {
   private buzz!: BuzzSystem;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -101,6 +110,8 @@ export class GameScene extends Phaser.Scene {
   private mode: "riding" | "chugging" = "riding";
   private paused = false;
   private pauseText!: Phaser.GameObjects.Text;
+  private routeIndex = 0;
+  private routeDef!: RouteDef;
   private d = 0;
   private lat = ROAD_WIDTH / 2;
   private speed = MIN_SPEED;
@@ -141,8 +152,11 @@ export class GameScene extends Phaser.Scene {
     super("Game");
   }
 
-  create(): void {
+  create(data: RunCarry): void {
+    this.routeIndex = data.routeIndex ?? 0;
+    this.routeDef = ROUTES[this.routeIndex];
     this.buzz = new BuzzSystem();
+    this.buzz.drink(data.buzz ?? 0);
     this.props = [];
     this.fixtures = [];
     this.steerHistory = [];
@@ -150,12 +164,12 @@ export class GameScene extends Phaser.Scene {
     this.d = 0;
     this.lat = ROAD_WIDTH / 2;
     this.speed = MIN_SPEED;
-    this.score = 0;
-    this.lives = START_LIVES;
+    this.score = data.score ?? 0;
+    this.lives = data.lives ?? START_LIVES;
     this.crashTimer = 0;
-    this.invulnTimer = 0;
+    this.invulnTimer = 1; // grace period at the route start
     this.visited = new Set();
-    this.streak = 0;
+    this.streak = data.streak ?? 0;
     this.npcs = [];
     this.pickups = [];
     this.cops = [];
@@ -163,7 +177,9 @@ export class GameScene extends Phaser.Scene {
     this.happyHour = false;
 
     // Grass oversized so camera sway never reveals the void.
-    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 700, 500, 0x4a6741).setDepth(-30);
+    this.add
+      .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 700, 500, this.routeDef.grassColor)
+      .setDepth(-30);
 
     // Horizon strip: sky, drifting clouds, and the Flatirons (west, as
     // they should be). The road overlaps it as it exits the top — the
@@ -180,7 +196,7 @@ export class GameScene extends Phaser.Scene {
     ];
 
     this.road = this.add
-      .rectangle(0, 0, 1500, ROAD_WIDTH, 0x3b3b45)
+      .rectangle(0, 0, 1500, ROAD_WIDTH, this.routeDef.roadColor)
       .setRotation(ROAD_ANGLE)
       .setDepth(-20);
 
@@ -197,12 +213,12 @@ export class GameScene extends Phaser.Scene {
       }
     }
     // Traffic cones on the road.
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < this.routeDef.cones; i++) {
       this.props.push({
         kind: "cone",
         d: 400 + i * 320,
         lat: Phaser.Math.FloatBetween(12, ROAD_WIDTH - 12),
-        span: 1600,
+        span: this.routeDef.cones * 320,
         obj: this.add.image(0, 0, "cone"),
       });
     }
@@ -222,7 +238,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Brewery buildings, signs, and stop zones on the shoulder.
-    for (const b of PEARL_ST_BREWERIES) {
+    for (const b of this.routeDef.breweries) {
       const buildingLat = b.side === "left" ? -40 : ROAD_WIDTH + 40;
       const zoneLat = b.side === "left" ? 8 : ROAD_WIDTH - 8;
       const building = this.add.container(0, 0, [
@@ -239,10 +255,10 @@ export class GameScene extends Phaser.Scene {
     // Moving hazards. Pedestrians wander the road, dogs bolt across,
     // geese hold their ground, car doors swing open near the curb.
     const npcSpecs: Array<{ kind: NpcKind; count: number; gap: number; latVel: number }> = [
-      { kind: "ped", count: 4, gap: 340, latVel: 12 },
-      { kind: "dog", count: 2, gap: 750, latVel: 42 },
-      { kind: "goose", count: 2, gap: 830, latVel: 4 },
-      { kind: "door", count: 2, gap: 910, latVel: 0 },
+      { kind: "ped", count: this.routeDef.peds, gap: 340, latVel: 12 },
+      { kind: "dog", count: this.routeDef.dogs, gap: 750, latVel: 42 },
+      { kind: "goose", count: this.routeDef.geese, gap: 830, latVel: 4 },
+      { kind: "door", count: this.routeDef.doors, gap: 910, latVel: 0 },
     ];
     let stagger = 500;
     for (const spec of npcSpecs) {
@@ -287,7 +303,12 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Boulder PD posts up on the shoulder along the route.
-    for (const copD of [1850 + Phaser.Math.Between(-200, 200), 3500 + Phaser.Math.Between(-200, 200)]) {
+    const copSpots: number[] = [];
+    for (let i = 0; i < this.routeDef.cops; i++) {
+      const base = (this.routeDef.length / (this.routeDef.cops + 1)) * (i + 1);
+      copSpots.push(base + Phaser.Math.Between(-200, 200));
+    }
+    for (const copD of copSpots) {
       const side = Math.random() < 0.5 ? -18 : ROAD_WIDTH + 18;
       const alert = this.add
         .text(0, -18, "!", { fontFamily: "monospace", fontSize: "12px", color: "#ff5555" })
@@ -368,7 +389,7 @@ export class GameScene extends Phaser.Scene {
       this.add.rectangle(GAME_WIDTH - 57, 9, 0, 6, 0xf7b32b).setOrigin(0, 0.5),
     ) as Phaser.GameObjects.Rectangle;
 
-    hud(this.add.text(GAME_WIDTH / 2 - 70, 4, "PEARL ST", { fontFamily: "monospace", fontSize: "8px", color: "#cfcfcf" }));
+    hud(this.add.text(GAME_WIDTH / 2 - 70, 4, this.routeDef.name, { fontFamily: "monospace", fontSize: "8px", color: "#cfcfcf" }));
     hud(this.add.rectangle(GAME_WIDTH / 2 - 20, 8, 80, 5, 0x222222).setOrigin(0, 0.5));
     this.progressFill = hud(
       this.add.rectangle(GAME_WIDTH / 2 - 19, 8, 0, 3, 0x8fd694).setOrigin(0, 0.5),
@@ -457,7 +478,7 @@ export class GameScene extends Phaser.Scene {
     this.d += forward * dt;
     this.score += 12 * (forward / 100) * dt;
 
-    if (this.d >= ROUTE_LENGTH) {
+    if (this.d >= this.routeDef.length) {
       // Finishing tipsy but upright pays out (design doc: risk reward).
       this.score += 500 + 5 * Math.floor(this.buzz.level);
       this.endRun(true);
@@ -465,7 +486,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Brewery stop zones: ride onto the marked shoulder to stop in.
-    for (const b of PEARL_ST_BREWERIES) {
+    for (const b of this.routeDef.breweries) {
       if (this.visited.has(b.name)) continue;
       const nearD = Math.abs(b.d - this.d) < 18;
       const onSide = b.side === "left" ? this.lat < 16 : this.lat > ROAD_WIDTH - 16;
@@ -740,7 +761,7 @@ export class GameScene extends Phaser.Scene {
     this.scoreText.setText(`SCORE ${Math.floor(this.score)}`);
     this.livesText.setText(`LIVES ${this.lives}`);
     this.buzzFill.width = 50 * (this.buzz.level / 100);
-    this.progressFill.width = 78 * (this.d / ROUTE_LENGTH);
+    this.progressFill.width = 78 * (this.d / this.routeDef.length);
   }
 
   // Project every prop and fixture from route space to the screen.
@@ -800,11 +821,23 @@ export class GameScene extends Phaser.Scene {
 
   private endRun(finished: boolean, busted = false): void {
     this.cameras.main.setScroll(0, 0);
+    const hasNext = finished && this.routeIndex < ROUTES.length - 1;
     this.scene.start("Results", {
       score: Math.floor(this.score),
       finished,
       busted,
       breweries: this.visited.size,
+      routeName: this.routeDef.name,
+      nextRouteName: hasNext ? ROUTES[this.routeIndex + 1].name : undefined,
+      carry: hasNext
+        ? {
+            routeIndex: this.routeIndex + 1,
+            score: Math.floor(this.score),
+            lives: this.lives,
+            buzz: this.buzz.level,
+            streak: this.streak,
+          }
+        : undefined,
     });
   }
 }

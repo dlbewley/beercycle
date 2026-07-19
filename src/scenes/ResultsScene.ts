@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../main";
 import { getLeaderboard } from "../systems/leaderboard";
+import type { RunCarry } from "./GameScene";
 
 // End-of-run tally styled as a local-paper front page (Paperboy's
 // spinning-headline homage). Parody masthead, no real-paper branding.
@@ -13,14 +14,22 @@ interface ResultsData {
   finished?: boolean;
   busted?: boolean;
   breweries?: number;
+  routeName?: string;
+  nextRouteName?: string;
+  carry?: RunCarry;
 }
 
-function headline(finished: boolean, breweries: number, busted: boolean): string {
-  if (busted) return "CYCLIST CITED FOR BUI ON PEARL ST";
-  if (finished && breweries >= 3) return "CYCLIST SWEEPS PEARL ST PUB CRAWL";
-  if (finished && breweries > 0) return "CYCLIST WOBBLES HOME HAPPY";
+function headline(
+  finished: boolean,
+  breweries: number,
+  busted: boolean,
+  route: string,
+): string {
+  if (busted) return `CYCLIST CITED FOR BUI ON ${route}`;
+  if (finished && breweries >= 3) return `CYCLIST SWEEPS ${route} PUB CRAWL`;
+  if (finished && breweries > 0) return "CYCLIST WOBBLES ONWARD, SMILING";
   if (finished) return "SOBER CYCLIST SETS COURSE RECORD";
-  return "BICYCLE MISHAP SNARLS PEARL ST";
+  return `BICYCLE MISHAP SNARLS ${route}`;
 }
 
 export class ResultsScene extends Phaser.Scene {
@@ -33,9 +42,14 @@ export class ResultsScene extends Phaser.Scene {
     const breweries = data.breweries ?? 0;
     const finished = data.finished ?? false;
     const busted = data.busted ?? false;
+    const routeName = data.routeName ?? "PEARL ST";
+    const isFinal = !data.carry;
 
+    // Only a finished run's final tally makes the record books.
     const board = getLeaderboard();
-    board.submit({ name: "CYC", score, date: new Date().toISOString() });
+    if (isFinal) {
+      board.submit({ name: "CYC", score, date: new Date().toISOString() });
+    }
     const top = board.getTop(5);
 
     const style = (size: string, color: string, wrap?: number) => ({
@@ -55,12 +69,13 @@ export class ResultsScene extends Phaser.Scene {
         .setOrigin(0.5, 0),
       this.add.rectangle(0, -72, 340, 1, 0x1a1423),
       this.add
-        .text(0, -56, headline(finished, breweries, busted), style("13px", INK, 340))
+        .text(0, -56, headline(finished, breweries, busted, routeName), style("13px", INK, 340))
         .setOrigin(0.5),
       this.add
         .text(
           0, -30,
-          `Witnesses report ${breweries} of 3 brewery stops.  Final score: ${score}.`,
+          `Witnesses report ${breweries} brewery stop${breweries === 1 ? "" : "s"} on ${routeName}.` +
+            `  ${isFinal ? "Final score" : "Score so far"}: ${score}.`,
           style("8px", FADED_INK, 320),
         )
         .setOrigin(0.5),
@@ -76,7 +91,15 @@ export class ResultsScene extends Phaser.Scene {
           )
           .setOrigin(0.5);
       }),
-      this.add.text(0, 96, "PRESS SPACE FOR MENU", style("9px", INK)).setOrigin(0.5),
+      this.add
+        .text(
+          0, 96,
+          isFinal
+            ? "PRESS SPACE FOR MENU"
+            : `NEXT STOP: ${data.nextRouteName} — PRESS SPACE TO RIDE ON`,
+          style("9px", isFinal ? INK : "#8a2b2b"),
+        )
+        .setOrigin(0.5),
     ]);
 
     // Paperboy-style spin-in.
@@ -90,7 +113,11 @@ export class ResultsScene extends Phaser.Scene {
     });
 
     this.input.keyboard?.once("keydown-SPACE", () => {
-      this.scene.start("Menu");
+      if (data.carry) {
+        this.scene.start("Game", data.carry);
+      } else {
+        this.scene.start("Menu");
+      }
     });
   }
 }
