@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../main";
 import { getLeaderboard } from "../systems/leaderboard";
 import type { RunCarry } from "./GameScene";
+import { AVATARS } from "../art/pixelart";
 
 // End-of-run tally styled as a local-paper front page (Paperboy's
 // spinning-headline homage). Parody masthead, no real-paper branding.
@@ -45,10 +46,13 @@ export class ResultsScene extends Phaser.Scene {
     const routeName = data.routeName ?? "PEARL ST";
     const isFinal = !data.carry;
 
-    // Only a finished run's final tally makes the record books.
+    // Only a finished run's final tally makes the record books, signed
+    // with the chosen rider's initials.
+    const initials =
+      AVATARS.find((a) => a.id === this.registry.get("avatar"))?.initials ?? "CYC";
     const board = getLeaderboard();
     if (isFinal) {
-      board.submit({ name: "CYC", score, date: new Date().toISOString() });
+      board.submit({ name: initials, score, date: new Date().toISOString() });
     }
     const top = board.getTop(5);
 

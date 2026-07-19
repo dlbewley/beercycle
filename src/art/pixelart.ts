@@ -25,6 +25,9 @@ const PAL: Palette = {
   E: "#2b2b2b", // near-black
   L: "#7ea44e", // leaf light
   M: "#4f7a36", // leaf dark
+  C: "#cddc39", // dwnwrd chartreuse
+  A: "#7d9bc4", // hoskins plaid blue
+  F: "#c9a86a", // hoskins sandy hair
 };
 
 const SPRITES: Record<string, string[]> = {
@@ -368,6 +371,234 @@ function makeBrewery(scene: Phaser.Scene): void {
   canvas.refresh();
 }
 
+// --- Player avatars: the three jokers (beercycle-uju) ------------------
+// Real-friend likenesses; canonical visual reference lives in the beads
+// epic. Portraits are 24x24, drawn in code per expression state so the
+// HUD can react Doom-status-face style.
+
+export type AvatarId = "dwnwrd" | "hoskins" | "drellis";
+
+export type AvatarState =
+  | "sober" | "tipsy" | "hammered" | "wince" | "sweat" | "chug" | "dead" | "smug";
+
+export const AVATAR_STATES: AvatarState[] = [
+  "sober", "tipsy", "hammered", "wince", "sweat", "chug", "dead", "smug",
+];
+
+export interface AvatarDef {
+  id: AvatarId;
+  name: string;
+  trait: string;
+  initials: string;
+}
+
+export const AVATARS: AvatarDef[] = [
+  { id: "dwnwrd", name: "DWNWRD", trait: "hacker * vegan * all stoke", initials: "DWN" },
+  { id: "hoskins", name: "HOSKINS", trait: "prankster * helmet optional", initials: "HOS" },
+  { id: "drellis", name: "DRELLIS", trait: "professorial * beer snob", initials: "DRE" },
+];
+
+const SKIN = "#d9a066";
+const INK_DARK = "#3a2b28";
+
+function drawPortrait(
+  ctx: CanvasRenderingContext2D,
+  id: AvatarId,
+  state: AvatarState,
+): void {
+  const p = (x: number, y: number, w: number, h: number, c: string) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(x, y, w, h);
+  };
+  const wide = id === "hoskins"; // rotund: wider face, fuller cheeks
+  const fx = wide ? 5 : 6;
+  const fw = wide ? 14 : 12;
+  const drunkish = state === "hammered" || state === "chug";
+  const flushed = state === "tipsy" || state === "sweat" || drunkish;
+
+  // Face.
+  p(fx, 7, fw, 11, SKIN);
+  p(fx + 1, 18, fw - 2, wide ? 3 : 2, SKIN); // chin
+  if (flushed) {
+    const cheek = drunkish ? "#d97f6f" : "#e59a86";
+    p(fx, 13, 3, 2, cheek);
+    p(fx + fw - 3, 13, 3, 2, cheek);
+    if (drunkish) p(11, 12, 2, 2, "#d97f6f"); // nose glow
+  }
+
+  // Headgear.
+  if (id === "hoskins") {
+    // Thinning sandy hair, gloriously helmet-free.
+    p(4, 3, 16, 4, "#c9a86a");
+    p(10, 3, 4, 2, SKIN); // the scalp gap
+    p(3, 5, 1, 2, "#c9a86a");
+    p(20, 5, 1, 2, "#c9a86a");
+  } else {
+    p(fx - 1, 1, fw + 2, 6, "#e8e8e8");
+    for (let i = 0; i < 3; i++) p(fx + 2 + i * 4, 2, 1, 3, "#b9c0c8"); // vents
+    if (id === "drellis") p(fx - 1, 6, 1, 6, "#7a8a4f"); // olive strap
+  }
+
+  // Eyewear (y 9-11). Hammered knocks it askew; dead gets X-eyes.
+  const askew = state === "hammered" ? 1 : 0;
+  if (id === "dwnwrd") {
+    p(5, 9, 14, 1, "#f0f0f0");
+    p(6, 9, 5, 3, "#3fd0c9");
+    p(13, 9 + askew, 5, 3, "#3fd0c9");
+    p(7, 9, 1, 1, "#c8fff8"); // glint
+  } else if (id === "drellis") {
+    p(6, 9, 5, 3, "#232323");
+    p(13, 9 + askew, 5, 3, "#232323");
+    p(11, 9, 2, 1, "#888888");
+  } else {
+    // Wire rims with visible eyes.
+    const rim = "#555555";
+    for (const lx of [6, 13]) {
+      p(lx, 9, 5, 1, rim);
+      p(lx, 11, 5, 1, rim);
+      p(lx, 9, 1, 3, rim);
+      p(lx + 4, 9, 1, 3, rim);
+    }
+    p(11, 9, 2, 1, rim);
+    const eye = (lx: number) => {
+      if (state === "dead") {
+        p(lx + 1, 9, 1, 1, INK_DARK); p(lx + 3, 11, 1, 1, INK_DARK);
+        p(lx + 3, 9, 1, 1, INK_DARK); p(lx + 1, 11, 1, 1, INK_DARK);
+        p(lx + 2, 10, 1, 1, INK_DARK);
+      } else if (state === "hammered" || state === "chug") {
+        p(lx + 1, 9, 1, 1, "#ffffff"); p(lx + 3, 10, 1, 1, INK_DARK);
+        p(lx + 2, 11, 1, 1, "#ffffff"); // swirl-ish
+      } else if (state === "tipsy" || state === "sweat" || state === "wince") {
+        p(lx + 1, 10, 3, 1, INK_DARK); // half-lidded / squeezed
+      } else {
+        p(lx + 2, 10, 1, 1, INK_DARK);
+      }
+    };
+    eye(6);
+    eye(13);
+  }
+  if (state === "dead" && id !== "hoskins") {
+    // X-eyes scrawled over the shades.
+    for (const lx of [6, 13]) {
+      p(lx + 1, 9, 1, 1, "#ffffff"); p(lx + 3, 11, 1, 1, "#ffffff");
+      p(lx + 3, 9, 1, 1, "#ffffff"); p(lx + 1, 11, 1, 1, "#ffffff");
+      p(lx + 2, 10, 1, 1, "#ffffff");
+    }
+  }
+
+  // Beard.
+  if (id === "dwnwrd") {
+    p(6, 13, 12, 7, "#b8b8b0");
+  } else if (id === "hoskins") {
+    p(5, 13, 14, 8, "#8a7a5e");
+  } else {
+    p(8, 14, 8, 2, "#8a8a86"); // mustache
+    p(8, 17, 8, 4, "#8a8a86"); // goatee
+  }
+
+  // Mouth (over the beard).
+  switch (state) {
+    case "sober":
+      if (id === "drellis") p(10, 17, 5, 1, INK_DARK); // wry line
+      else {
+        p(9, 16, 6, 2, INK_DARK);
+        p(9, 16, 6, 1, "#ffffff");
+      }
+      break;
+    case "tipsy":
+    case "sweat":
+      p(8, 16, 8, 2, INK_DARK);
+      p(8, 16, 8, 1, "#ffffff");
+      break;
+    case "hammered":
+      p(9, 17, 2, 1, INK_DARK); p(11, 16, 2, 1, INK_DARK); p(13, 17, 2, 1, INK_DARK);
+      break;
+    case "wince":
+      p(9, 16, 6, 2, "#ffffff");
+      for (const gx of [10, 12, 14]) p(gx, 16, 1, 2, INK_DARK);
+      break;
+    case "chug":
+      p(10, 15, 5, 4, INK_DARK);
+      p(10, 15, 5, 1, "#ffffff");
+      break;
+    case "dead":
+      p(11, 17, 3, 2, INK_DARK);
+      break;
+    case "smug":
+      p(9, 17, 5, 1, INK_DARK);
+      p(14, 16, 1, 1, INK_DARK);
+      break;
+  }
+
+  // State garnish.
+  if (state === "sweat") {
+    p(20, 6, 1, 1, "#7fd4ff");
+    p(20, 7, 2, 3, "#7fd4ff");
+  }
+  if (state === "wince") {
+    for (const [sx, sy] of [[2, 6], [21, 8], [3, 15], [20, 16]] as const) {
+      p(sx, sy, 1, 1, "#ffe14d");
+    }
+  }
+
+  // Shirt.
+  if (id === "dwnwrd") {
+    p(3, 21, 18, 3, "#cddc39");
+  } else if (id === "hoskins") {
+    for (let y = 21; y < 24; y++) {
+      for (let x = 2; x < 22; x += 2) {
+        p(x, y, 2, 1, (x / 2 + y) % 2 === 0 ? "#7d9bc4" : "#e8e8f0");
+      }
+    }
+  } else {
+    p(3, 21, 18, 3, "#9a9a9a");
+    p(4, 21, 2, 3, "#5f5f5f");
+    p(18, 21, 2, 3, "#5f5f5f");
+  }
+}
+
+function makeAvatarTextures(scene: Phaser.Scene): void {
+  for (const av of AVATARS) {
+    for (const state of AVATAR_STATES) {
+      const key = `av_${av.id}_${state}`;
+      if (scene.textures.exists(key)) continue;
+      const canvas = scene.textures.createCanvas(key, 24, 24)!;
+      drawPortrait(canvas.getContext(), av.id, state);
+      canvas.refresh();
+    }
+  }
+}
+
+// Per-avatar rider sprites, derived from the base bike pixel maps:
+// dwnwrd rides in chartreuse, hoskins in plaid with bare sandy hair,
+// drellis in gray with backpack straps.
+function bikeVariantRows(base: string[], id: AvatarId): string[] {
+  return base.map((row, y) =>
+    row
+      .split("")
+      .map((ch, x) => {
+        if (id === "dwnwrd") return ch === "J" ? "C" : ch;
+        if (id === "hoskins") {
+          if (ch === "H") return "F"; // helmet -> hair
+          if (ch === "J") return (x + y) % 2 === 0 ? "A" : "H"; // plaid
+          return ch;
+        }
+        // drellis
+        if (ch === "J") return y === 8 && (x === 3 || x === 7) ? "E" : "G"; // straps
+        return ch;
+      })
+      .join(""),
+  );
+}
+
+function makeBikeVariants(scene: Phaser.Scene): void {
+  for (const av of AVATARS) {
+    for (const frame of ["a", "b"] as const) {
+      makeSpriteTexture(scene, `bike_${av.id}_${frame}`, bikeVariantRows(SPRITES[`bike_${frame}`], av.id));
+    }
+  }
+}
+
 export function createGameTextures(scene: Phaser.Scene): void {
   for (const [key, rows] of Object.entries(SPRITES)) {
     makeSpriteTexture(scene, key, rows);
@@ -376,4 +607,6 @@ export function createGameTextures(scene: Phaser.Scene): void {
   makeFlatirons(scene);
   makeCloud(scene);
   makeBrewery(scene);
+  makeAvatarTextures(scene);
+  makeBikeVariants(scene);
 }

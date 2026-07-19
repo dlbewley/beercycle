@@ -4,6 +4,7 @@ import { BuzzSystem } from "../systems/buzz";
 import { type Brewery } from "../systems/breweries";
 import { ROUTES, type RouteDef } from "../systems/routes";
 import { audio } from "../systems/audio";
+import { type AvatarId, type AvatarState } from "../art/pixelart";
 
 // Core riding model: the route is a 1D distance axis (d) with a lateral
 // position (lat, 0..ROAD_WIDTH) across the road. Screen position is a
@@ -112,6 +113,11 @@ export class GameScene extends Phaser.Scene {
   private pauseText!: Phaser.GameObjects.Text;
   private routeIndex = 0;
   private routeDef!: RouteDef;
+  private avatarId: AvatarId = "dwnwrd";
+  private portrait!: Phaser.GameObjects.Image;
+  private portraitState: AvatarState = "sober";
+  private smugTimer = 0;
+  private lastSway = 0;
   private d = 0;
   private lat = ROAD_WIDTH / 2;
   private speed = MIN_SPEED;
@@ -155,6 +161,9 @@ export class GameScene extends Phaser.Scene {
   create(data: RunCarry): void {
     this.routeIndex = data.routeIndex ?? 0;
     this.routeDef = ROUTES[this.routeIndex];
+    this.avatarId = (this.registry.get("avatar") as AvatarId) ?? "dwnwrd";
+    this.smugTimer = 0;
+    this.lastSway = 0;
     this.buzz = new BuzzSystem();
     this.buzz.drink(data.buzz ?? 0);
     this.props = [];
@@ -318,7 +327,7 @@ export class GameScene extends Phaser.Scene {
       this.cops.push({ d: copD, lat: side, obj, alert });
     }
 
-    this.bike = this.add.image(ANCHOR.x, ANCHOR.y, "bike_a").setDepth(ANCHOR.y);
+    this.bike = this.add.image(ANCHOR.x, ANCHOR.y, `bike_${this.avatarId}_a`).setDepth(ANCHOR.y);
     this.pedalTimer = 0;
 
     if (!this.textures.exists("vignette")) {
@@ -382,6 +391,14 @@ export class GameScene extends Phaser.Scene {
     this.livesText = hud(
       this.add.text(6, 16, `LIVES ${this.lives}`, { fontFamily: "monospace", fontSize: "10px", color: "#8fd694" }),
     ) as Phaser.GameObjects.Text;
+
+    // Doom-style status face, bottom-left (emptiest corner during play).
+    this.portrait = this.add
+      .image(24, GAME_HEIGHT - 22, `av_${this.avatarId}_sober`)
+      .setScale(1.5)
+      .setScrollFactor(0)
+      .setDepth(1001);
+    this.portraitState = "sober";
 
     hud(this.add.text(GAME_WIDTH - 92, 4, "BUZZ", { fontFamily: "monospace", fontSize: "10px", color: "#f7b32b" }));
     hud(this.add.rectangle(GAME_WIDTH - 58, 9, 52, 8, 0x222222).setOrigin(0, 0.5));
@@ -526,7 +543,9 @@ export class GameScene extends Phaser.Scene {
     this.pedalTimer += dt * (forward / 60);
     if (this.pedalTimer > 0.18) {
       this.pedalTimer = 0;
-      this.bike.setTexture(this.bike.texture.key === "bike_a" ? "bike_b" : "bike_a");
+      this.bike.setTexture(
+        this.bike.texture.key.endsWith("_a") ? `bike_${this.avatarId}_b` : `bike_${this.avatarId}_a`,
+      );
     }
 
     // Backdrop life: subtle Flatirons parallax, drifting clouds.
@@ -537,6 +556,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.cameras.main.setScroll(fx.sway, fx.sway * 0.4);
+    this.lastSway = fx.sway;
     this.vignette.setAlpha(fx.vignette * 0.85);
 
     this.layoutWorld();
@@ -607,7 +627,7 @@ export class GameScene extends Phaser.Scene {
         n.passed = true;
         if (n.grazed) {
           this.score += 30;
-          this.popup("+30 CLOSE ONE", "#8fd694");
+          this.popup(this.avatarId === "hoskins" ? "HEH. +30" : "+30 CLOSE ONE", "#8fd694");
         }
       }
     }
@@ -637,7 +657,10 @@ export class GameScene extends Phaser.Scene {
       case "taco":
         this.buzz.sober(15);
         this.score += 25;
-        this.popup("TACO  +25, BUZZ -15", "#e8c56a");
+        this.popup(
+          this.avatarId === "dwnwrd" ? "TOFU TACO  +25, BUZZ -15" : "TACO  +25, BUZZ -15",
+          "#e8c56a",
+        );
         break;
       case "tube":
         this.lives++;
@@ -722,11 +745,15 @@ export class GameScene extends Phaser.Scene {
         audio.sfx(perfect ? "pour" : "chug");
         this.chugLocked = true;
         this.resultTimer = 0.8;
-        this.chugFeedback.setText(perfect ? `PERFECT POUR! +${points}` : `+${points}`);
+        if (perfect) this.smugTimer = 1.2;
+        const perfectLine =
+          this.avatarId === "drellis" ? `IMPECCABLE MOUTHFEEL! +${points}` : `PERFECT POUR! +${points}`;
+        this.chugFeedback.setText(perfect ? perfectLine : `+${points}`);
         this.chugPrompt.setText("");
       }
       return;
     }
+    this.smugTimer = Math.max(0, this.smugTimer - dt);
     if (this.resultTimer > 0) {
       this.resultTimer -= dt;
       if (this.resultTimer <= 0) {
@@ -762,6 +789,23 @@ export class GameScene extends Phaser.Scene {
     this.livesText.setText(`LIVES ${this.lives}`);
     this.buzzFill.width = 50 * (this.buzz.level / 100);
     this.progressFill.width = 78 * (this.d / this.routeDef.length);
+
+    const state = this.portraitStateFor();
+    if (state !== this.portraitState) {
+      this.portraitState = state;
+      this.portrait.setTexture(`av_${this.avatarId}_${state}`);
+    }
+    // The face itself rocks when you're deep in it.
+    this.portrait.rotation = this.buzz.level >= 40 ? this.lastSway * 0.03 : 0;
+  }
+
+  private portraitStateFor(): AvatarState {
+    if (this.crashTimer > 0) return this.lives <= 0 ? "dead" : "wince";
+    if (this.mode === "chugging") return this.smugTimer > 0 ? "smug" : "chug";
+    if (this.suspicion > 0.15) return "sweat";
+    if (this.buzz.level >= 75) return "hammered";
+    if (this.buzz.level >= 35) return "tipsy";
+    return "sober";
   }
 
   // Project every prop and fixture from route space to the screen.

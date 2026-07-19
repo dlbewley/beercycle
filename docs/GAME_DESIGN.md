@@ -122,6 +122,26 @@ track. Everything else is post-MVP.
 MVP Pearl Street route stops: **Mountain Moon**, **Best Flanders**,
 **Bolder Beer Co.** (the three with real-world Pearl-Street-area roots).
 
+## The Riders (player avatars)
+
+Three selectable riders, pixel likenesses of real friends of the project
+(see beads epic beercycle-uju for canonical visual reference):
+
+| Rider | Look | Personality | Flavor hooks |
+|---|---|---|---|
+| **DWNWRD** | white helmet, teal mirror shades, silver beard, chartreuse kit | hacker, vegan, all stoke | taco pickups are TOFU TACOS |
+| **HOSKINS** | no helmet, thinning sandy hair, wire glasses, plaid | rotund prankster | smirks at near-misses ("HEH.") |
+| **DRELLIS** | white helmet, dark shades, goatee, gray shirt + backpack | professorial, slim, beer snob | perfect pours are "IMPECCABLE MOUTHFEEL" |
+
+The chosen rider's portrait is a **Doom-style status face** in the HUD
+corner: degrades with Buzz (smile → flushed → swirly-eyed, and the
+portrait physically rocks with the camera sway), winces during crashes,
+sweats when a cop has line of sight, parties during chugs, goes X-eyed
+when the run ends, smug on a PERFECT POUR. Road sprite palette matches
+the rider (HOSKINS rides helmetless; Boulder judges silently). High
+scores are signed DWN / HOS / DRE. The menu shows the trio as a tilted
+polaroid ("the jokers").
+
 ## Decisions (locked 2026-07-19)
 
 1. **Parody brewery names** — trademark-safe, on-tone. Roster above.
