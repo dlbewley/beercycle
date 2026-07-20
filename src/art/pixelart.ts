@@ -30,6 +30,7 @@ const PAL: Palette = {
   F: "#c9a86a", // hoskins sandy hair
   U: "#49b8d8", // jillbake blue hair
   I: "#e8517e", // jillbake pink hoodie
+  V: "#cfcbd8", // pen lavender-gray tee
 };
 
 const SPRITES: Record<string, string[]> = {
@@ -498,7 +499,7 @@ function makeBeerAndGlyphTextures(scene: Phaser.Scene): void {
 // epic. Portraits are 24x24, drawn in code per expression state so the
 // HUD can react Doom-status-face style.
 
-export type AvatarId = "dwnwrd" | "hoskins" | "drellis" | "jillbake";
+export type AvatarId = "dwnwrd" | "hoskins" | "drellis" | "jillbake" | "pen";
 
 export type AvatarState =
   | "sober" | "tipsy" | "hammered" | "wince" | "sweat" | "chug" | "dead" | "smug";
@@ -519,12 +520,15 @@ export const AVATARS: AvatarDef[] = [
   { id: "hoskins", name: "HOSKINS", trait: "prankster * helmet optional", initials: "HOS" },
   { id: "drellis", name: "DRELLIS", trait: "professorial * beer snob", initials: "DRE" },
   { id: "jillbake", name: "JILLBAKE", trait: "berkeley feminist * one student at a time", initials: "JIL" },
+  { id: "pen", name: "PEN", trait: "smooth jazz clarinet * extremely chill", initials: "PEN" },
 ];
 
 const SKIN = "#d9a066";
 const INK_DARK = "#3a2b28";
 const HAIR_BLUE = "#49b8d8";
 const HAIR_BLUE_DK = "#2e7ea3";
+const HAIR_BROWN = "#7a573a";
+const HAIR_BROWN_DK = "#5a3f2a";
 
 function drawPortrait(
   ctx: CanvasRenderingContext2D,
@@ -569,6 +573,15 @@ function drawPortrait(
     p(20, 6, 1, 15, HAIR_BLUE_DK);
     p(6, 7, 1, 1, HAIR_BLUE); // stray bangs
     p(17, 7, 1, 1, HAIR_BLUE);
+  } else if (id === "pen") {
+    // Brown hair, half pulled back, falling to the shoulders.
+    p(5, 1, 14, 1, HAIR_BROWN);
+    p(4, 2, 16, 5, HAIR_BROWN);
+    p(8, 2, 8, 1, HAIR_BROWN_DK); // swept-back top
+    p(3, 4, 3, 14, HAIR_BROWN); // left fall
+    p(18, 4, 3, 14, HAIR_BROWN); // right fall
+    p(3, 6, 1, 12, HAIR_BROWN_DK);
+    p(20, 6, 1, 12, HAIR_BROWN_DK);
   } else {
     p(fx - 1, 1, fw + 2, 6, "#e8e8e8");
     for (let i = 0; i < 3; i++) p(fx + 2 + i * 4, 2, 1, 3, "#b9c0c8"); // vents
@@ -601,6 +614,27 @@ function drawPortrait(
     p(15, 11 + askew, 2, 1, "#5a8a4a");
     p(10, 13, 1, 1, "#ffe14d"); // nose studs
     p(13, 13, 1, 1, "#ffe14d");
+  } else if (id === "pen") {
+    // No eyewear at all — brows and easy, unhurried eyes.
+    p(7, 8, 3, 1, HAIR_BROWN_DK);
+    p(14, 8, 3, 1, HAIR_BROWN_DK);
+    const eye = (lx: number) => {
+      if (state === "dead") {
+        p(lx + 1, 9, 1, 1, INK_DARK); p(lx + 3, 11, 1, 1, INK_DARK);
+        p(lx + 3, 9, 1, 1, INK_DARK); p(lx + 1, 11, 1, 1, INK_DARK);
+        p(lx + 2, 10, 1, 1, INK_DARK);
+      } else if (state === "hammered" || state === "chug") {
+        p(lx + 1, 9, 1, 1, "#ffffff"); p(lx + 3, 10, 1, 1, INK_DARK);
+        p(lx + 2, 11, 1, 1, "#ffffff");
+      } else if (state === "tipsy" || state === "sweat" || state === "wince") {
+        p(lx + 1, 10, 3, 1, INK_DARK);
+      } else {
+        p(lx + 1, 10, 3, 1, "#ffffff");
+        p(lx + 2, 10, 1, 1, INK_DARK);
+      }
+    };
+    eye(6);
+    eye(13);
   } else {
     // Wire rims with visible eyes.
     const rim = "#555555";
@@ -628,7 +662,7 @@ function drawPortrait(
     eye(6);
     eye(13);
   }
-  if (state === "dead" && id !== "hoskins") {
+  if (state === "dead" && id !== "hoskins" && id !== "pen") {
     // X-eyes scrawled over the shades.
     for (const lx of [6, 13]) {
       p(lx + 1, 9, 1, 1, "#ffffff"); p(lx + 3, 11, 1, 1, "#ffffff");
@@ -707,6 +741,14 @@ function drawPortrait(
     p(13, 21, 1, 3, "#f7f7e8");
     p(3, 21, 2, 3, HAIR_BLUE); // hair over the shoulders
     p(19, 21, 2, 3, HAIR_BLUE);
+  } else if (id === "pen") {
+    p(9, 20, 6, 1, SKIN); // neck
+    p(2, 21, 20, 3, "#cfcbd8"); // oversized tee, extra slouch
+    p(2, 21, 1, 3, "#b3aec2");
+    p(21, 21, 1, 3, "#b3aec2");
+    p(8, 21, 2, 1, "#c49a5e"); // crossbody strap
+    p(9, 22, 2, 1, "#c49a5e");
+    p(10, 23, 2, 1, "#c49a5e");
   } else if (id === "hoskins") {
     for (let y = 21; y < 24; y++) {
       for (let x = 2; x < 22; x += 2) {
@@ -750,6 +792,11 @@ function bikeVariantRows(base: string[], id: AvatarId): string[] {
         if (id === "jillbake") {
           if (ch === "H") return "U"; // helmet -> blue hair
           if (ch === "J") return y >= 9 && (x === 3 || x === 7) ? "U" : "I"; // hoodie + trailing hair
+          return ch;
+        }
+        if (id === "pen") {
+          if (ch === "H") return "B"; // helmet -> brown hair
+          if (ch === "J") return y >= 8 && x === y - 4 ? "Y" : "V"; // strap across the tee
           return ch;
         }
         // drellis
