@@ -207,6 +207,7 @@ export class GameScene extends Phaser.Scene {
   // machine the keyboard uses; pointer position steers while riding.
   private touchTap = false;
   private touchEnter = false;
+  private muteBtn?: Phaser.GameObjects.Text;
   private prevPourHeld = false;
   private speedUpHeld = false;
   private speedDownHeld = false;
@@ -469,7 +470,10 @@ export class GameScene extends Phaser.Scene {
       .setVisible(false);
 
     this.input.keyboard!.once("keydown-ESC", () => this.endRun(false));
-    this.input.keyboard!.on("keydown-M", () => audio.toggleMute());
+    this.input.keyboard!.on("keydown-M", () => {
+      audio.toggleMute();
+      this.refreshMuteBtn();
+    });
     this.input.keyboard!.on("keydown-P", () => {
       this.paused = !this.paused;
       this.pauseText.setVisible(this.paused);
@@ -503,13 +507,42 @@ export class GameScene extends Phaser.Scene {
     };
     mk(GAME_HEIGHT - 82, "+", (v) => (this.speedUpHeld = v));
     mk(GAME_HEIGHT - 44, "-", (v) => (this.speedDownHeld = v));
+
+    // Touch mute toggle above the speed buttons (beercycle-q25); shows
+    // live state so a silent phone is distinguishable from a muted game.
+    this.muteBtn = this.add
+      .text(GAME_WIDTH - 26, GAME_HEIGHT - 120, "", {
+        fontFamily: "monospace",
+        fontSize: "11px",
+        color: "#ffffff",
+        backgroundColor: "#14101c",
+      })
+      .setOrigin(0.5)
+      .setPadding(8, 6, 8, 6)
+      .setScrollFactor(0)
+      .setDepth(1001)
+      .setAlpha(0.65)
+      .setInteractive();
+    this.refreshMuteBtn();
+    this.muteBtn.on("pointerdown", () => {
+      audio.unlock();
+      audio.toggleMute();
+      if (!audio.isMuted()) audio.sfx("pickup");
+      this.refreshMuteBtn();
+    });
+  }
+
+  private refreshMuteBtn(): void {
+    this.muteBtn
+      ?.setText(audio.isMuted() ? "♪✗" : "♪")
+      .setColor(audio.isMuted() ? "#d9756a" : "#ffffff");
   }
 
   // Any held pointer outside the speed-button corner steers toward it.
   private touchSteerRaw(): number {
     for (const p of this.input.manager.pointers) {
       if (!p.isDown) continue;
-      if (p.x > GAME_WIDTH - 56 && p.y > GAME_HEIGHT - 104) continue;
+      if (p.x > GAME_WIDTH - 56 && p.y > GAME_HEIGHT - 142) continue; // button corner incl. mute
       if (p.x < ANCHOR.x - 10) return -1;
       if (p.x > ANCHOR.x + 10) return 1;
       return 0;

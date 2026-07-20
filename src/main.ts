@@ -4,6 +4,7 @@ import { MenuScene } from "./scenes/MenuScene";
 import { GameScene } from "./scenes/GameScene";
 import { ResultsScene } from "./scenes/ResultsScene";
 import { GameOverScene } from "./scenes/GameOverScene";
+import { audio } from "./systems/audio";
 
 export const GAME_WIDTH = 480;
 export const GAME_HEIGHT = 270;
@@ -28,6 +29,10 @@ const game = new Phaser.Game({
   },
   scene: [BootScene, MenuScene, GameScene, ResultsScene, GameOverScene],
 });
+
+// Recover a suspended AudioContext on the next gesture or tab return
+// (mobile browsers suspend it on backgrounding/interruptions).
+audio.attachAutoResume();
 
 // The FIT scaler can size against a zero-height parent when the page
 // boots in a hidden/background tab; refresh once it becomes visible.
