@@ -278,23 +278,24 @@ export class GameScene extends Phaser.Scene {
     ];
 
     // The road itself: overlapping segments recycled along the curving
-    // centerline (a single band can't bend).
-    for (let i = 0; i < 18; i++) {
+    // centerline (a single band can't bend). The pool must span the whole
+    // visible window [-180, 300) or the road pops at the screen edges.
+    for (let i = 0; i < 20; i++) {
       const obj = this.add
         .rectangle(0, 0, 34, this.roadW, this.routeDef.roadColor)
         .setRotation(ROAD_ANGLE);
-      this.props.push({ kind: "roadseg", d: i * 24 - 100, lat: 0, span: 18 * 24, obj });
+      this.props.push({ kind: "roadseg", d: i * 24 - 180, lat: 0, span: 20 * 24, obj });
     }
     // Lane stripes down the road center.
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 10; i++) {
       const obj = this.add.rectangle(0, 0, 20, 4, 0xf7f7e8).setRotation(ROAD_ANGLE);
-      this.props.push({ kind: "stripe", d: i * 50, lat: 0, span: 350, obj });
+      this.props.push({ kind: "stripe", d: i * 50 - 180, lat: 0, span: 500, obj });
     }
     // Curb blocks on both edges (lat holds the edge sign).
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 14; i++) {
       for (const edge of [-1, 1]) {
         const obj = this.add.rectangle(0, 0, 7, 7, 0xb8b8a0);
-        this.props.push({ kind: "curb", d: i * 35, lat: edge, span: 350, obj });
+        this.props.push({ kind: "curb", d: i * 35 - 180, lat: edge, span: 490, obj });
       }
     }
     // Traffic cones on the road (lat relative to centerline).
@@ -859,7 +860,7 @@ export class GameScene extends Phaser.Scene {
         if (Math.abs(n.lat) > this.roadW / 2 - 6) n.latDir *= -1;
         n.obj.setFlipX(n.latDir < 0);
       }
-      while (n.d < this.d - 100) {
+      while (n.d < this.d - 170) {
         n.d += n.span;
         n.lat = this.npcLat(n.kind);
         n.grazed = false;
@@ -887,7 +888,7 @@ export class GameScene extends Phaser.Scene {
 
   private updatePickups(): void {
     for (const p of this.pickups) {
-      while (p.d < this.d - 100) {
+      while (p.d < this.d - 170) {
         p.d += p.span;
         p.lat = Phaser.Math.FloatBetween(-this.roadW / 2 + 14, this.roadW / 2 - 14);
       }
@@ -1443,7 +1444,7 @@ export class GameScene extends Phaser.Scene {
   // and stripes (which ARE the centerline) and curbs (edge signs).
   private layoutWorld(): void {
     for (const p of this.props) {
-      while (p.d < this.d - 110) {
+      while (p.d < this.d - 180) {
         p.d += p.span;
         if (p.kind === "cone") {
           p.lat = Phaser.Math.FloatBetween(-this.roadW / 2 + 12, this.roadW / 2 - 12);
@@ -1478,7 +1479,10 @@ export class GameScene extends Phaser.Scene {
     const sx = ANCHOR.x + CROSS.x * latOff + FORWARD.x * rel;
     const sy = ANCHOR.y + CROSS.y * latOff + FORWARD.y * rel;
     obj.setPosition(sx, sy).setDepth(sy);
-    obj.setVisible(rel > -100 && rel < 260);
+    // Generous margins: with lateral curve offsets, objects near the
+    // bottom-left/top-right corners are still on-screen well past the
+    // naive window, and culling early pops the road mid-screen.
+    obj.setVisible(rel > -170 && rel < 300);
   }
 
   // Buzz input lag: steer commands replay from a short history buffer.
