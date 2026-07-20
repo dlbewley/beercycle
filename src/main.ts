@@ -3,6 +3,7 @@ import { BootScene } from "./scenes/BootScene";
 import { MenuScene } from "./scenes/MenuScene";
 import { GameScene } from "./scenes/GameScene";
 import { ResultsScene } from "./scenes/ResultsScene";
+import { GameOverScene } from "./scenes/GameOverScene";
 
 export const GAME_WIDTH = 480;
 export const GAME_HEIGHT = 270;
@@ -25,7 +26,7 @@ const game = new Phaser.Game({
   input: {
     activePointers: 3, // steer + speed button simultaneously on touch
   },
-  scene: [BootScene, MenuScene, GameScene, ResultsScene],
+  scene: [BootScene, MenuScene, GameScene, ResultsScene, GameOverScene],
 });
 
 // The FIT scaler can size against a zero-height parent when the page

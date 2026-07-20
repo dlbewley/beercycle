@@ -5,7 +5,7 @@
 // The Buzz link: setDetune() warbles both music and SFX pitch as the
 // meter climbs, per the design doc.
 
-type SfxName = "bell" | "crash" | "pour" | "pickup" | "chug" | "bust";
+type SfxName = "bell" | "crash" | "pour" | "pickup" | "chug" | "bust" | "lastcall";
 
 const BASS = [110, 110, 165, 110, 147, 110, 165, 196];
 const LEAD = [440, 523, 659, 523, 587, 494, 523, 392, 440, 523, 659, 784, 659, 587, 523, 494];
@@ -105,6 +105,14 @@ class AudioSystem {
           this.note(500, t + i * 0.3 + 0.15, 0.14, "square", 0.12);
         }
         break;
+      case "lastcall": {
+        // Sad trombone: three descending notes, then a long wobbly one.
+        const seq = [392, 370, 349];
+        seq.forEach((f, i) => this.note(f, t + i * 0.35, 0.3, "sawtooth", 0.13));
+        this.note(311, t + 1.05, 0.9, "sawtooth", 0.13);
+        this.note(315, t + 1.05, 0.9, "sawtooth", 0.09); // detuned beat = the wah
+        break;
+      }
     }
   }
 

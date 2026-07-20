@@ -1183,6 +1183,18 @@ export class GameScene extends Phaser.Scene {
       : finished
         ? vocabLine(this.avatarId, "finish")
         : vocabLine(this.avatarId, "crash");
+    if (!finished) {
+      // Failure endings get the LAST CALL screen; the Bugle is reserved
+      // for transitions and finishing the crawl.
+      this.scene.start("GameOver", {
+        score: Math.floor(this.score),
+        busted,
+        riderName: AVATARS.find((a) => a.id === this.avatarId)?.name ?? "CYCLIST",
+        avatarId: this.avatarId,
+        quote,
+      });
+      return;
+    }
     this.scene.start("Results", {
       score: Math.floor(this.score),
       finished,
