@@ -30,7 +30,7 @@ const PAL: Palette = {
   F: "#c9a86a", // hoskins sandy hair
   U: "#49b8d8", // jillbake blue hair
   I: "#e8517e", // jillbake pink hoodie
-  V: "#cfcbd8", // pen lavender-gray tee
+  V: "#cfcbd8", // plkstr lavender-gray tee
   W: "#8a6f52", // aafran ash-brown bob
 };
 
@@ -500,7 +500,7 @@ function makeBeerAndGlyphTextures(scene: Phaser.Scene): void {
 // epic. Portraits are 24x24, drawn in code per expression state so the
 // HUD can react Doom-status-face style.
 
-export type AvatarId = "dwnwrd" | "hoskins" | "drellis" | "jillbake" | "pen" | "aafran";
+export type AvatarId = "dwnwrd" | "hoskins" | "drellis" | "jillbake" | "plkstr" | "aafran";
 
 export type AvatarState =
   | "sober" | "tipsy" | "hammered" | "wince" | "sweat" | "chug" | "dead" | "smug";
@@ -521,7 +521,7 @@ export const AVATARS: AvatarDef[] = [
   { id: "hoskins", name: "HOSKINS", trait: "prankster * helmet optional", initials: "HOS" },
   { id: "drellis", name: "DRELLIS", trait: "professorial * beer snob", initials: "DRE" },
   { id: "jillbake", name: "JILLBAKE", trait: "berkeley feminist * one student at a time", initials: "JIL" },
-  { id: "pen", name: "PEN", trait: "smooth jazz clarinet * extremely chill", initials: "PEN" },
+  { id: "plkstr", name: "PLKSTR", trait: "smooth jazz clarinet * extremely chill", initials: "PLK" },
   { id: "aafran", name: "AAFRAN", trait: "ivory tower * takes no shit", initials: "AAF" },
 ];
 
@@ -577,7 +577,7 @@ function drawPortrait(
     p(20, 6, 1, 15, HAIR_BLUE_DK);
     p(6, 7, 1, 1, HAIR_BLUE); // stray bangs
     p(17, 7, 1, 1, HAIR_BLUE);
-  } else if (id === "pen") {
+  } else if (id === "plkstr") {
     // Brown hair, half pulled back, falling to the shoulders.
     p(5, 1, 14, 1, HAIR_BROWN);
     p(4, 2, 16, 5, HAIR_BROWN);
@@ -628,7 +628,7 @@ function drawPortrait(
     p(15, 11 + askew, 2, 1, "#5a8a4a");
     p(10, 13, 1, 1, "#ffe14d"); // nose studs
     p(13, 13, 1, 1, "#ffe14d");
-  } else if (id === "pen") {
+  } else if (id === "plkstr") {
     // No eyewear at all — brows and easy, unhurried eyes.
     p(7, 8, 3, 1, HAIR_BROWN_DK);
     p(14, 8, 3, 1, HAIR_BROWN_DK);
@@ -699,7 +699,7 @@ function drawPortrait(
     eye(6);
     eye(13);
   }
-  if (state === "dead" && id !== "hoskins" && id !== "pen" && id !== "aafran") {
+  if (state === "dead" && id !== "hoskins" && id !== "plkstr" && id !== "aafran") {
     // X-eyes scrawled over the shades.
     for (const lx of [6, 13]) {
       p(lx + 1, 9, 1, 1, "#ffffff"); p(lx + 3, 11, 1, 1, "#ffffff");
@@ -780,7 +780,7 @@ function drawPortrait(
     p(13, 21, 1, 3, "#f7f7e8");
     p(3, 21, 2, 3, HAIR_BLUE); // hair over the shoulders
     p(19, 21, 2, 3, HAIR_BLUE);
-  } else if (id === "pen") {
+  } else if (id === "plkstr") {
     p(9, 20, 6, 1, SKIN); // neck
     p(2, 21, 20, 3, "#cfcbd8"); // oversized tee, extra slouch
     p(2, 21, 1, 3, "#b3aec2");
@@ -845,7 +845,7 @@ function bikeVariantRows(base: string[], id: AvatarId): string[] {
           if (ch === "J") return y >= 9 && (x === 3 || x === 7) ? "U" : "I"; // hoodie + trailing hair
           return ch;
         }
-        if (id === "pen") {
+        if (id === "plkstr") {
           if (ch === "H") return "B"; // helmet -> brown hair
           if (ch === "J") return y >= 8 && x === y - 4 ? "Y" : "V"; // strap across the tee
           return ch;

@@ -2,8 +2,9 @@ import type { AvatarId } from "../art/pixelart";
 
 // Per-rider voice lines (beercycle-bmi). Personalities per the avatar
 // epic: DWNWRD hacker/vegan, HOSKINS prankster, DRELLIS beer snob,
-// JILLBAKE berkeley feminist (beercycle-8tb), PEN smooth jazz
-// clarinetist (beercycle-0ay), AAFRAN no-shit professor (beercycle-1u8).
+// JILLBAKE berkeley feminist (beercycle-8tb), PLKSTR smooth jazz
+// clarinetist (beercycle-0ay, renamed from PEN in beercycle-78m),
+// AAFRAN no-shit professor (beercycle-1u8).
 
 export type VocabEvent =
   | "enter" | "perfect" | "crash" | "bust" | "finish" | "water" | "cutoff";
@@ -45,7 +46,7 @@ const LINES: Record<AvatarId, Record<VocabEvent, string[]>> = {
     water: ["SELF-CARE IS RESISTANCE."],
     cutoff: ["SILENCED AGAIN. TYPICAL.", "FINE. I HAVE PAPERS TO GRADE."],
   },
-  pen: {
+  plkstr: {
     enter: ["WHAT'S ON DRAFT, MAN.", "GOT A GIG AT NINE. ISH.", "SMOOTH POURS ONLY."],
     perfect: ["SMOOOOTH.", "RIGHT IN THE POCKET.", "THAT'S THE GOOD STUFF."],
     crash: ["BAD NOTE. HAPPENS.", "WE'LL CALL THAT A REST.", "OW. ANYWAY."],
