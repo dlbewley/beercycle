@@ -3,7 +3,7 @@ import type { AvatarId } from "../art/pixelart";
 // Per-rider voice lines (beercycle-bmi). Personalities per the avatar
 // epic: DWNWRD hacker/vegan, HOSKINS prankster, DRELLIS beer snob,
 // JILLBAKE berkeley feminist (beercycle-8tb), PEN smooth jazz
-// clarinetist (beercycle-0ay).
+// clarinetist (beercycle-0ay), AAFRAN no-shit professor (beercycle-1u8).
 
 export type VocabEvent =
   | "enter" | "perfect" | "crash" | "bust" | "finish" | "water" | "cutoff";
@@ -53,6 +53,15 @@ const LINES: Record<AvatarId, Record<VocabEvent, string[]>> = {
     finish: ["AND THAT'S THE SET.", "TIP YOUR BARTENDER."],
     water: ["GOTTA PACE THE SOLO."],
     cutoff: ["COOL, COOL. I'LL VAMP.", "FAIR. THE REED'S DRY ANYWAY."],
+  },
+  aafran: {
+    enter: ["TENURED. TRY ME.", "THE COMMITTEE CAN WAIT.", "I'VE READ YOUR TAP LIST. AMBITIOUS."],
+    perfect: ["CORRECT.", "SEE? RIGOR.", "PUBLISHABLE."],
+    crash: ["REJECTED. RESUBMIT.", "THE ROAD GETS AN F.", "NOTED. MOVING ON."],
+    bust: ["THIS WON'T SURVIVE PEER REVIEW, OFFICER.", "CITE YOUR PROBABLE CAUSE."],
+    finish: ["SEMINAR ADJOURNED.", "OFFICE HOURS: NEVER."],
+    water: ["HYDRATION IS NON-NEGOTIABLE."],
+    cutoff: ["FINE. I GRADE HARDER SOBER.", "A DEFENSIBLE RULING."],
   },
 };
 
