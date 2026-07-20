@@ -6,8 +6,93 @@ import { AVATARS } from "../art/pixelart";
 
 const AVATAR_STORE_KEY = "beercycle.avatar.v1";
 
+// The polaroid stream (beercycle-gnd): a rotating pile of ride photos,
+// one gag per rider plus the original group shot. Scenes are collaged
+// from existing game textures.
+interface PolaroidShot {
+  key: string;
+  x: number;
+  y: number;
+  scale?: number;
+  angle?: number;
+  flipX?: boolean;
+}
+
+interface PolaroidSpec {
+  caption: string;
+  angle: number;
+  shots: PolaroidShot[];
+}
+
+const POLAROIDS: PolaroidSpec[] = [
+  {
+    caption: "the jokers",
+    angle: 6,
+    shots: [
+      { key: "av_dwnwrd_sober", x: -24, y: -2, scale: 1.7 },
+      { key: "av_hoskins_chug", x: 8, y: -8, scale: 1.2 },
+      { key: "av_drellis_sober", x: 28, y: -4, scale: 1.2 },
+    ],
+  },
+  {
+    caption: "the vegan audit",
+    angle: -5,
+    shots: [
+      { key: "av_dwnwrd_chug", x: -16, y: -6, scale: 1.6 },
+      { key: "taco", x: 10, y: 4, scale: 1.4 },
+      { key: "booch", x: 24, y: -4, scale: 1.3 },
+    ],
+  },
+  {
+    caption: "the goose incident",
+    angle: 5,
+    shots: [
+      { key: "av_hoskins_wince", x: -16, y: -4, scale: 1.6 },
+      { key: "goose", x: 12, y: -8, scale: 1.3, flipX: true },
+      { key: "goose", x: 26, y: 2, scale: 1.0, flipX: true, angle: -20 },
+    ],
+  },
+  {
+    caption: "a defensible vintage",
+    angle: -4,
+    shots: [
+      { key: "av_drellis_smug", x: -18, y: -6, scale: 1.6 },
+      { key: "glass_kinda", x: 8, y: 2, scale: 1.4 },
+      { key: "dartboard", x: 28, y: -8, scale: 0.45 },
+    ],
+  },
+  {
+    caption: "a teachable moment",
+    angle: 7,
+    shots: [
+      { key: "av_jillbake_smug", x: -18, y: -6, scale: 1.6 },
+      { key: "cop", x: 14, y: -2, scale: 1.4 },
+    ],
+  },
+  {
+    caption: "creek soundcheck",
+    angle: -6,
+    shots: [
+      { key: "av_plkstr_tipsy", x: -18, y: -6, scale: 1.6 },
+      { key: "tube", x: 12, y: 2, scale: 1.3 },
+      { key: "water", x: 28, y: -6, scale: 1.2 },
+    ],
+  },
+  {
+    caption: "grading the potholes",
+    angle: 4,
+    shots: [
+      { key: "av_aafran_sober", x: -18, y: -6, scale: 1.6 },
+      { key: "cone", x: 10, y: 4, scale: 1.3 },
+      { key: "cone", x: 24, y: 0, scale: 1.0, angle: 30 },
+    ],
+  },
+];
+
 export class MenuScene extends Phaser.Scene {
   private avatarIndex = 0;
+  private polaroidIndex = 0;
+  private polaroid?: Phaser.GameObjects.Container;
   private portrait!: Phaser.GameObjects.Image;
   private nameText!: Phaser.GameObjects.Text;
   private traitText!: Phaser.GameObjects.Text;
@@ -72,19 +157,16 @@ export class MenuScene extends Phaser.Scene {
       ease: "Sine.easeInOut",
     });
 
-    // The polaroid: the three jokers, mid-ride selfie.
-    const polaroid = this.add.container(GAME_WIDTH - 62, GAME_HEIGHT - 60, [
-      this.add.rectangle(0, 0, 96, 84, 0xf2ead8),
-      this.add.rectangle(0, -8, 84, 56, 0x9fd0e8),
-      this.add.image(-6, 12, "flatirons").setScale(0.28).setOrigin(0.5, 1),
-      this.add.image(-24, -2, "av_dwnwrd_sober").setScale(1.7),
-      this.add.image(8, -8, "av_hoskins_chug").setScale(1.2),
-      this.add.image(28, -4, "av_drellis_sober").setScale(1.2),
-      this.add
-        .text(0, 32, "the jokers", { fontFamily: "monospace", fontSize: "8px", color: "#4a4438" })
-        .setOrigin(0.5),
-    ]);
-    polaroid.setAngle(6);
+    // The polaroid stream: fresh ride photo drops in every few seconds.
+    this.showPolaroid(0);
+    this.time.addEvent({
+      delay: 3800,
+      loop: true,
+      callback: () => {
+        this.polaroidIndex = (this.polaroidIndex + 1) % POLAROIDS.length;
+        this.showPolaroid(this.polaroidIndex);
+      },
+    });
 
     this.refreshAvatar();
     this.input.keyboard?.on("keydown-LEFT", () => {
@@ -164,6 +246,36 @@ export class MenuScene extends Phaser.Scene {
         if (over.length === 0) startRide();
       },
     );
+  }
+
+  private showPolaroid(index: number): void {
+    const spec = POLAROIDS[index];
+    this.polaroid?.destroy();
+    const kids: Phaser.GameObjects.GameObject[] = [
+      this.add.rectangle(0, 0, 96, 84, 0xf2ead8),
+      this.add.rectangle(0, -8, 84, 56, 0x9fd0e8),
+      this.add.image(-6, 12, "flatirons").setScale(0.28).setOrigin(0.5, 1),
+      ...spec.shots.map((s) => {
+        const img = this.add.image(s.x, s.y, s.key).setScale(s.scale ?? 1);
+        if (s.flipX) img.setFlipX(true);
+        if (s.angle) img.setAngle(s.angle);
+        return img;
+      }),
+      this.add
+        .text(0, 32, spec.caption, { fontFamily: "monospace", fontSize: "7px", color: "#4a4438" })
+        .setOrigin(0.5),
+    ];
+    const c = this.add.container(GAME_WIDTH - 62, GAME_HEIGHT - 60, kids);
+    c.setAngle(spec.angle + 16).setScale(1.3).setAlpha(0);
+    this.tweens.add({
+      targets: c,
+      angle: spec.angle,
+      scale: 1,
+      alpha: 1,
+      duration: 420,
+      ease: "Back.easeOut",
+    });
+    this.polaroid = c;
   }
 
   private refreshAvatar(): void {
