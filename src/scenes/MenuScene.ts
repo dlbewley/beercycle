@@ -127,16 +127,21 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    // Tappable (and clickable) select arrows.
-    const arrow = (x: number, dir: number, glyph: string) =>
+    // Tappable (and clickable) select arrows. The glyph is just the
+    // visual; a much larger invisible zone catches the actual touch
+    // (beercycle-dm1) so thumbs don't have to hit an 11px character.
+    const arrow = (x: number, dir: number, glyph: string) => {
       this.add
-        .text(x, 216, glyph, { fontFamily: "monospace", fontSize: "18px", color: "#f7b32b" })
-        .setOrigin(0.5)
+        .text(x, 216, glyph, { fontFamily: "monospace", fontSize: "20px", color: "#f7b32b" })
+        .setOrigin(0.5);
+      this.add
+        .zone(x, 216, 44, 64)
         .setInteractive({ useHandCursor: true })
         .on("pointerdown", () => {
           this.avatarIndex = (this.avatarIndex + dir + AVATARS.length) % AVATARS.length;
           this.refreshAvatar();
         });
+    };
     arrow(colX - 44, -1, "<");
     arrow(colX + 44, 1, ">");
     this.nameText = this.add
@@ -221,15 +226,34 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.add
-      .text(GAME_WIDTH - 6, GAME_HEIGHT - 8, "M: mute", {
+    // Touchable sound toggle with live state (beercycle-q25) — doubles
+    // as a "you are not muted" indicator. M still works on keyboard.
+    const soundText = this.add
+      .text(GAME_WIDTH - 6, GAME_HEIGHT - 8, "", {
         fontFamily: "monospace",
         fontSize: "8px",
         color: "#7a7a7a",
       })
       .setOrigin(1, 0.5);
-
-    this.input.keyboard?.on("keydown-M", () => audio.toggleMute());
+    const refreshSound = () => {
+      soundText
+        .setText(audio.isMuted() ? "♪ sound OFF" : "♪ sound on")
+        .setColor(audio.isMuted() ? "#d9756a" : "#7a7a7a");
+    };
+    refreshSound();
+    this.add
+      .zone(GAME_WIDTH - 30, GAME_HEIGHT - 12, 60, 24)
+      .setInteractive({ useHandCursor: true })
+      .on("pointerdown", () => {
+        audio.unlock(); // gesture-tied resume for mobile
+        audio.toggleMute();
+        if (!audio.isMuted()) audio.sfx("bell"); // audible confirmation
+        refreshSound();
+      });
+    this.input.keyboard?.on("keydown-M", () => {
+      audio.toggleMute();
+      refreshSound();
+    });
     let started = false;
     const startRide = () => {
       if (started) return;

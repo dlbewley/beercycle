@@ -38,6 +38,32 @@ class AudioSystem {
     return this.ctx;
   }
 
+  // Mobile lifeline (beercycle-q25): iOS/Android suspend the context on
+  // backgrounding or audio interruptions and only a user gesture can
+  // reliably bring it back. Hook every gesture + tab-return so a
+  // suspended context recovers on the next touch instead of staying
+  // silent forever.
+  attachAutoResume(): void {
+    const kick = () => {
+      if (this.ctx && this.ctx.state !== "running") void this.ctx.resume();
+    };
+    window.addEventListener("pointerdown", kick, { passive: true });
+    window.addEventListener("touchend", kick, { passive: true });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) kick();
+    });
+  }
+
+  // Call from inside a touch/click handler to create+resume the context
+  // while the gesture is live.
+  unlock(): void {
+    this.ensure();
+  }
+
+  isMuted(): boolean {
+    return this.muted;
+  }
+
   // Buzz 0-100 → up to ~70 cents of random warble on every note.
   setDetune(buzzLevel: number): void {
     this.detuneCents = buzzLevel * 0.7;
@@ -46,6 +72,7 @@ class AudioSystem {
   toggleMute(): boolean {
     this.muted = !this.muted;
     if (this.musicGain) this.musicGain.gain.value = this.muted ? 0 : 0.12;
+    if (!this.muted) this.ensure(); // unmuting should also revive the ctx
     return this.muted;
   }
 
