@@ -28,6 +28,8 @@ const PAL: Palette = {
   C: "#cddc39", // dwnwrd chartreuse
   A: "#7d9bc4", // hoskins plaid blue
   F: "#c9a86a", // hoskins sandy hair
+  U: "#49b8d8", // jillbake blue hair
+  I: "#e8517e", // jillbake pink hoodie
 };
 
 const SPRITES: Record<string, string[]> = {
@@ -496,7 +498,7 @@ function makeBeerAndGlyphTextures(scene: Phaser.Scene): void {
 // epic. Portraits are 24x24, drawn in code per expression state so the
 // HUD can react Doom-status-face style.
 
-export type AvatarId = "dwnwrd" | "hoskins" | "drellis";
+export type AvatarId = "dwnwrd" | "hoskins" | "drellis" | "jillbake";
 
 export type AvatarState =
   | "sober" | "tipsy" | "hammered" | "wince" | "sweat" | "chug" | "dead" | "smug";
@@ -516,10 +518,13 @@ export const AVATARS: AvatarDef[] = [
   { id: "dwnwrd", name: "DWNWRD", trait: "hacker * vegan * all stoke", initials: "DWN" },
   { id: "hoskins", name: "HOSKINS", trait: "prankster * helmet optional", initials: "HOS" },
   { id: "drellis", name: "DRELLIS", trait: "professorial * beer snob", initials: "DRE" },
+  { id: "jillbake", name: "JILLBAKE", trait: "berkeley feminist * one student at a time", initials: "JIL" },
 ];
 
 const SKIN = "#d9a066";
 const INK_DARK = "#3a2b28";
+const HAIR_BLUE = "#49b8d8";
+const HAIR_BLUE_DK = "#2e7ea3";
 
 function drawPortrait(
   ctx: CanvasRenderingContext2D,
@@ -553,6 +558,17 @@ function drawPortrait(
     p(10, 3, 4, 2, SKIN); // the scalp gap
     p(3, 5, 1, 2, "#c9a86a");
     p(20, 5, 1, 2, "#c9a86a");
+  } else if (id === "jillbake") {
+    // Long blue hair, middle part, falling past the shoulders.
+    p(5, 1, 14, 1, HAIR_BLUE);
+    p(4, 2, 16, 5, HAIR_BLUE);
+    p(11, 2, 2, 2, HAIR_BLUE_DK); // the part
+    p(3, 4, 3, 17, HAIR_BLUE); // left fall
+    p(18, 4, 3, 17, HAIR_BLUE); // right fall
+    p(3, 6, 1, 15, HAIR_BLUE_DK);
+    p(20, 6, 1, 15, HAIR_BLUE_DK);
+    p(6, 7, 1, 1, HAIR_BLUE); // stray bangs
+    p(17, 7, 1, 1, HAIR_BLUE);
   } else {
     p(fx - 1, 1, fw + 2, 6, "#e8e8e8");
     for (let i = 0; i < 3; i++) p(fx + 2 + i * 4, 2, 1, 3, "#b9c0c8"); // vents
@@ -570,6 +586,21 @@ function drawPortrait(
     p(6, 9, 5, 3, "#232323");
     p(13, 9 + askew, 5, 3, "#232323");
     p(11, 9, 2, 1, "#888888");
+  } else if (id === "jillbake") {
+    // Red frames, sky-mirrored lenses, nose studs both sides.
+    const frame = "#c23a4a";
+    p(5, 8, 14, 1, frame);
+    p(5, 9, 1, 3, frame);
+    p(18, 9 + askew, 1, 3, frame);
+    p(11, 9, 2, 1, frame); // bridge
+    p(6, 9, 5, 3, "#8fd4f0");
+    p(13, 9 + askew, 5, 3, "#8fd4f0");
+    p(7, 9, 1, 1, "#e8f8ff"); // sky glint
+    p(14, 9 + askew, 1, 1, "#e8f8ff");
+    p(8, 11, 2, 1, "#5a8a4a"); // treeline in the mirror
+    p(15, 11 + askew, 2, 1, "#5a8a4a");
+    p(10, 13, 1, 1, "#ffe14d"); // nose studs
+    p(13, 13, 1, 1, "#ffe14d");
   } else {
     // Wire rims with visible eyes.
     const rim = "#555555";
@@ -606,12 +637,12 @@ function drawPortrait(
     }
   }
 
-  // Beard.
+  // Beard (jillbake, sensibly, has none).
   if (id === "dwnwrd") {
     p(6, 13, 12, 7, "#b8b8b0");
   } else if (id === "hoskins") {
     p(5, 13, 14, 8, "#8a7a5e");
-  } else {
+  } else if (id === "drellis") {
     p(8, 14, 8, 2, "#8a8a86"); // mustache
     p(8, 17, 8, 4, "#8a8a86"); // goatee
   }
@@ -620,7 +651,11 @@ function drawPortrait(
   switch (state) {
     case "sober":
       if (id === "drellis") p(10, 17, 5, 1, INK_DARK); // wry line
-      else {
+      else if (id === "jillbake") {
+        p(9, 17, 6, 1, INK_DARK); // closed smile, corners up
+        p(8, 16, 1, 1, INK_DARK);
+        p(15, 16, 1, 1, INK_DARK);
+      } else {
         p(9, 16, 6, 2, INK_DARK);
         p(9, 16, 6, 1, "#ffffff");
       }
@@ -664,6 +699,14 @@ function drawPortrait(
   // Shirt.
   if (id === "dwnwrd") {
     p(3, 21, 18, 3, "#cddc39");
+  } else if (id === "jillbake") {
+    p(9, 20, 6, 1, SKIN); // neck
+    p(3, 21, 18, 3, "#e8517e"); // pink hoodie
+    p(9, 21, 6, 1, "#c23a63"); // hood collar
+    p(10, 21, 1, 3, "#f7f7e8"); // drawstrings
+    p(13, 21, 1, 3, "#f7f7e8");
+    p(3, 21, 2, 3, HAIR_BLUE); // hair over the shoulders
+    p(19, 21, 2, 3, HAIR_BLUE);
   } else if (id === "hoskins") {
     for (let y = 21; y < 24; y++) {
       for (let x = 2; x < 22; x += 2) {
@@ -691,7 +734,8 @@ function makeAvatarTextures(scene: Phaser.Scene): void {
 
 // Per-avatar rider sprites, derived from the base bike pixel maps:
 // dwnwrd rides in chartreuse, hoskins in plaid with bare sandy hair,
-// drellis in gray with backpack straps.
+// drellis in gray with backpack straps, jillbake in pink with blue hair
+// streaming behind.
 function bikeVariantRows(base: string[], id: AvatarId): string[] {
   return base.map((row, y) =>
     row
@@ -701,6 +745,11 @@ function bikeVariantRows(base: string[], id: AvatarId): string[] {
         if (id === "hoskins") {
           if (ch === "H") return "F"; // helmet -> hair
           if (ch === "J") return (x + y) % 2 === 0 ? "A" : "H"; // plaid
+          return ch;
+        }
+        if (id === "jillbake") {
+          if (ch === "H") return "U"; // helmet -> blue hair
+          if (ch === "J") return y >= 9 && (x === 3 || x === 7) ? "U" : "I"; // hoodie + trailing hair
           return ch;
         }
         // drellis

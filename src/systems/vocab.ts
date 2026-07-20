@@ -1,7 +1,8 @@
 import type { AvatarId } from "../art/pixelart";
 
 // Per-rider voice lines (beercycle-bmi). Personalities per the avatar
-// epic: DWNWRD hacker/vegan, HOSKINS prankster, DRELLIS beer snob.
+// epic: DWNWRD hacker/vegan, HOSKINS prankster, DRELLIS beer snob,
+// JILLBAKE berkeley feminist (beercycle-8tb).
 
 export type VocabEvent =
   | "enter" | "perfect" | "crash" | "bust" | "finish" | "water" | "cutoff";
@@ -33,6 +34,15 @@ const LINES: Record<AvatarId, Record<VocabEvent, string[]>> = {
     finish: ["A RESPECTABLE SESSION.", "SUFFICIENTLY PEATED."],
     water: ["A PALATE CLEANSER."],
     cutoff: ["PROBABLY WISE.", "A RESPONSIBLE POUR COUNT."],
+  },
+  jillbake: {
+    enter: ["WHO BREWED THIS? A WOMAN, I HOPE.", "OFFICE HOURS ARE CANCELED.", "THE SYLLABUS SAYS DRINK LOCAL."],
+    perfect: ["A+. NO NOTES.", "THAT'S HOW IT'S DONE, PEOPLE.", "GRADED ON MY CURVE."],
+    crash: ["PATRIARCHY BUILT THIS POTHOLE.", "THE ROAD IS A SOCIAL CONSTRUCT.", "I MEANT THAT AS CRITIQUE."],
+    bust: ["THIS IS A TEACHABLE MOMENT, OFFICER.", "I'VE READ FOUCAULT. I KNOW HOW THIS ENDS."],
+    finish: ["CLASS DISMISSED.", "ONE STUDENT AT A TIME."],
+    water: ["SELF-CARE IS RESISTANCE."],
+    cutoff: ["SILENCED AGAIN. TYPICAL.", "FINE. I HAVE PAPERS TO GRADE."],
   },
 };
 
