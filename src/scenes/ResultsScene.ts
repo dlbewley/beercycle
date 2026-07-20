@@ -3,6 +3,7 @@ import { GAME_WIDTH, GAME_HEIGHT } from "../main";
 import { getLeaderboard } from "../systems/leaderboard";
 import type { RunCarry } from "./GameScene";
 import { AVATARS } from "../art/pixelart";
+import { ROUTES } from "../systems/routes";
 
 // End-of-run tally styled as a local-paper front page (Paperboy's
 // spinning-headline homage). Parody masthead, no real-paper branding.
@@ -94,7 +95,7 @@ export class ResultsScene extends Phaser.Scene {
         .setOrigin(0.5),
       this.add.rectangle(0, -16, 340, 1, 0x1a1423),
       this.add.text(0, -8, "— HIGH SCORES —", style("9px", INK)).setOrigin(0.5),
-      ...top.map((entry, i) => {
+      ...top.slice(0, isFinal ? 5 : 3).map((entry, i) => {
         const isThisRun = entry.score === score;
         return this.add
           .text(
@@ -104,6 +105,8 @@ export class ResultsScene extends Phaser.Scene {
           )
           .setOrigin(0.5);
       }),
+      // Coming-attractions marquee for the next route (beercycle-zgh).
+      ...this.nextRoutePreview(data, style),
       this.add
         .text(
           0, 96,
@@ -137,5 +140,39 @@ export class ResultsScene extends Phaser.Scene {
     };
     this.input.keyboard?.once("keydown-SPACE", advance);
     this.input.once("pointerdown", advance);
+  }
+
+  // Glyph + signature pour + name for each brewery on the next route,
+  // plus the hazard forecast. Only rendered on transition pages.
+  private nextRoutePreview(
+    data: ResultsData,
+    style: (size: string, color: string, wrap?: number) => object,
+  ): Phaser.GameObjects.GameObject[] {
+    const nextIndex = data.carry?.routeIndex;
+    if (nextIndex === undefined || !ROUTES[nextIndex]) return [];
+    const next = ROUTES[nextIndex];
+    const shown = next.breweries.slice(0, 4);
+    const objs: Phaser.GameObjects.GameObject[] = [
+      this.add
+        .text(0, 46, `— NEXT ON THE CRAWL: ${next.name} —`, style("8px", INK))
+        .setOrigin(0.5),
+      this.add.text(0, 84, next.forecast, style("7px", FADED_INK, 340)).setOrigin(0.5),
+    ];
+    shown.forEach((b, i) => {
+      const x = (i - (shown.length - 1) / 2) * 84;
+      objs.push(
+        this.add.image(x - 12, 62, `glyph_${b.glyph}`).setTint(b.accent),
+        this.add.image(x + 6, 62, `glass_${b.taps[0].id}`),
+        this.add
+          .text(x, 76, b.name, {
+            fontFamily: "monospace",
+            fontSize: "6px",
+            color: FADED_INK,
+            align: "center",
+          })
+          .setOrigin(0.5),
+      );
+    });
+    return objs;
   }
 }

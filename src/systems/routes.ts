@@ -11,6 +11,12 @@ export interface RouteDef {
   length: number;
   roadColor: number;
   grassColor: number;
+  // Road geometry (beercycle-zgh): width in world units, plus a curving
+  // centerline C(d) = curveAmp * sin(d * curveFreq) that the road follows.
+  roadWidth: number;
+  curveAmp: number;
+  curveFreq: number;
+  forecast: string; // hazard line shown on the transition preview
   breweries: Brewery[];
   cones: number;
   peds: number;
@@ -27,6 +33,10 @@ export const ROUTES: RouteDef[] = [
     length: 5000,
     roadColor: 0x3b3b45,
     grassColor: 0x4a6741,
+    roadWidth: 130,
+    curveAmp: 14,
+    curveFreq: 1 / 520,
+    forecast: "expect: tourists, cones, the occasional goose",
     breweries: [
       {
         id: "mountainmoon",
@@ -86,6 +96,10 @@ export const ROUTES: RouteDef[] = [
     length: 4200,
     roadColor: 0x44404a,
     grassColor: 0x55703f,
+    roadWidth: 108,
+    curveAmp: 30,
+    curveFreq: 1 / 300,
+    forecast: "expect: game-day crowds, loose dogs, a narrow twisty road",
     // Game-day crowds: it's all pedestrians and loose dogs up here.
     breweries: [
       {
@@ -129,6 +143,10 @@ export const ROUTES: RouteDef[] = [
     length: 6000,
     roadColor: 0x3a3f3a,
     grassColor: 0x6b6b4f,
+    roadWidth: 150,
+    curveAmp: 42,
+    curveFreq: 1 / 700,
+    forecast: "expect: loading zones, geese, one more cop than usual",
     // Industrial brewery density; watch the loading zones.
     breweries: [
       {

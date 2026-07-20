@@ -11,14 +11,14 @@ import {
 import { vocabLine } from "../systems/vocab";
 
 // Core riding model: the route is a 1D distance axis (d) with a lateral
-// position (lat, 0..ROAD_WIDTH) across the road. Screen position is a
+// position (lat, relative to the route baseline) across the road. Screen
+// position is a
 // fixed player anchor plus offsets along the two diagonal axes below —
 // the Paperboy pseudo-isometric look without real isometric tiles.
 const FORWARD = new Phaser.Math.Vector2(1, -2).normalize(); // up-right
 const CROSS = new Phaser.Math.Vector2(2, 1).normalize(); // across the road
 const ROAD_ANGLE = Math.atan2(FORWARD.y, FORWARD.x);
 
-const ROAD_WIDTH = 130;
 const SHOULDER = 28; // rideable grass strip before the crash boundary
 const ANCHOR = new Phaser.Math.Vector2(150, 185); // bike's screen position
 const MIN_SPEED = 50;
@@ -33,7 +33,7 @@ type WorldObj =
   | Phaser.GameObjects.Image
   | Phaser.GameObjects.Container;
 
-type PropKind = "stripe" | "curb" | "cone" | "deco";
+type PropKind = "roadseg" | "stripe" | "curb" | "cone" | "deco";
 
 interface Prop {
   kind: PropKind;
@@ -106,7 +106,6 @@ export class GameScene extends Phaser.Scene {
   private enterKey!: Phaser.Input.Keyboard.Key;
   private props: Prop[] = [];
   private fixtures: Fixture[] = [];
-  private road!: Phaser.GameObjects.Rectangle;
   private bike!: Phaser.GameObjects.Image;
   private vignette!: Phaser.GameObjects.Image;
   private flatirons!: Phaser.GameObjects.Image;
@@ -118,13 +117,17 @@ export class GameScene extends Phaser.Scene {
   private pauseText!: Phaser.GameObjects.Text;
   private routeIndex = 0;
   private routeDef!: RouteDef;
+  // Road geometry (beercycle-zgh): lat 0 is the route baseline; the road
+  // center wanders along C(d) and everything on it stores lat relative
+  // to that centerline.
+  private roadW = 130;
   private avatarId: AvatarId = "dwnwrd";
   private portrait!: Phaser.GameObjects.Image;
   private portraitState: AvatarState = "sober";
   private smugTimer = 0;
   private lastSway = 0;
   private d = 0;
-  private lat = ROAD_WIDTH / 2;
+  private lat = 0;
   private speed = MIN_SPEED;
   private score = 0;
   private lives = START_LIVES;
@@ -227,6 +230,7 @@ export class GameScene extends Phaser.Scene {
     this.routeIndex = data.routeIndex ?? 0;
     this.routeDef = ROUTES[this.routeIndex];
     this.avatarId = (this.registry.get("avatar") as AvatarId) ?? "dwnwrd";
+    this.roadW = this.routeDef.roadWidth;
     this.smugTimer = 0;
     this.lastSway = 0;
     this.buzz = new BuzzSystem();
@@ -236,7 +240,7 @@ export class GameScene extends Phaser.Scene {
     this.steerHistory = [];
     this.mode = "riding";
     this.d = 0;
-    this.lat = ROAD_WIDTH / 2;
+    this.lat = 0; // road centerline
     this.speed = MIN_SPEED;
     this.score = data.score ?? 0;
     this.lives = data.lives ?? START_LIVES;
@@ -273,29 +277,32 @@ export class GameScene extends Phaser.Scene {
       this.add.image(260, 26, "cloud").setScrollFactor(0).setDepth(-27).setScale(0.7),
     ];
 
-    this.road = this.add
-      .rectangle(0, 0, 1500, ROAD_WIDTH, this.routeDef.roadColor)
-      .setRotation(ROAD_ANGLE)
-      .setDepth(-20);
-
+    // The road itself: overlapping segments recycled along the curving
+    // centerline (a single band can't bend).
+    for (let i = 0; i < 18; i++) {
+      const obj = this.add
+        .rectangle(0, 0, 34, this.roadW, this.routeDef.roadColor)
+        .setRotation(ROAD_ANGLE);
+      this.props.push({ kind: "roadseg", d: i * 24 - 100, lat: 0, span: 18 * 24, obj });
+    }
     // Lane stripes down the road center.
     for (let i = 0; i < 7; i++) {
       const obj = this.add.rectangle(0, 0, 20, 4, 0xf7f7e8).setRotation(ROAD_ANGLE);
-      this.props.push({ kind: "stripe", d: i * 50, lat: ROAD_WIDTH / 2, span: 350, obj });
+      this.props.push({ kind: "stripe", d: i * 50, lat: 0, span: 350, obj });
     }
-    // Curb blocks on both edges.
+    // Curb blocks on both edges (lat holds the edge sign).
     for (let i = 0; i < 10; i++) {
-      for (const lat of [-4, ROAD_WIDTH + 4]) {
+      for (const edge of [-1, 1]) {
         const obj = this.add.rectangle(0, 0, 7, 7, 0xb8b8a0);
-        this.props.push({ kind: "curb", d: i * 35, lat, span: 350, obj });
+        this.props.push({ kind: "curb", d: i * 35, lat: edge, span: 350, obj });
       }
     }
-    // Traffic cones on the road.
+    // Traffic cones on the road (lat relative to centerline).
     for (let i = 0; i < this.routeDef.cones; i++) {
       this.props.push({
         kind: "cone",
         d: 400 + i * 320,
-        lat: Phaser.Math.FloatBetween(12, ROAD_WIDTH - 12),
+        lat: Phaser.Math.FloatBetween(-this.roadW / 2 + 12, this.roadW / 2 - 12),
         span: this.routeDef.cones * 320,
         obj: this.add.image(0, 0, "cone"),
       });
@@ -305,11 +312,10 @@ export class GameScene extends Phaser.Scene {
     const decoKeys = ["tree", "tree", "bush", "flowers"];
     for (let i = 0; i < 14; i++) {
       const side = Math.random() < 0.5 ? -1 : 1;
-      const latBase = side < 0 ? -46 : ROAD_WIDTH + 46;
       this.props.push({
         kind: "deco",
         d: i * 95,
-        lat: latBase + side * Phaser.Math.FloatBetween(0, 55),
+        lat: side * (this.roadW / 2 + 46 + Phaser.Math.FloatBetween(0, 55)),
         span: 14 * 95,
         obj: this.add.image(0, 0, decoKeys[i % decoKeys.length]).setOrigin(0.5, 1),
       });
@@ -317,8 +323,9 @@ export class GameScene extends Phaser.Scene {
 
     // Brewery buildings, signs, and stop zones on the shoulder.
     for (const b of this.routeDef.breweries) {
-      const buildingLat = b.side === "left" ? -40 : ROAD_WIDTH + 40;
-      const zoneLat = b.side === "left" ? 8 : ROAD_WIDTH - 8;
+      const sideSign = b.side === "left" ? -1 : 1;
+      const buildingLat = sideSign * (this.roadW / 2 + 40);
+      const zoneLat = sideSign * (this.roadW / 2 - 8);
       const building = this.add.container(0, 0, [
         this.add.image(0, 0, "brewery"),
         this.add
@@ -372,7 +379,7 @@ export class GameScene extends Phaser.Scene {
         this.pickups.push({
           kind: spec.kind,
           d: stagger + i * spec.gap,
-          lat: Phaser.Math.FloatBetween(14, ROAD_WIDTH - 14),
+          lat: Phaser.Math.FloatBetween(-this.roadW / 2 + 14, this.roadW / 2 - 14),
           span: spec.count * spec.gap,
           obj: this.makePickupSprite(spec.kind),
         });
@@ -387,7 +394,7 @@ export class GameScene extends Phaser.Scene {
       copSpots.push(base + Phaser.Math.Between(-200, 200));
     }
     for (const copD of copSpots) {
-      const side = Math.random() < 0.5 ? -18 : ROAD_WIDTH + 18;
+      const side = (Math.random() < 0.5 ? -1 : 1) * (this.roadW / 2 + 18);
       const alert = this.add
         .text(0, -18, "!", { fontFamily: "monospace", fontSize: "12px", color: "#ff5555" })
         .setOrigin(0.5)
@@ -676,7 +683,10 @@ export class GameScene extends Phaser.Scene {
           return;
         }
         this.bike.rotation = 0;
-        this.lat = Phaser.Math.Clamp(this.lat, 12, ROAD_WIDTH - 12);
+        const center = this.centerLat(this.d);
+        this.lat = center + Phaser.Math.Clamp(
+          this.lat - center, -this.roadW / 2 + 12, this.roadW / 2 - 12,
+        );
         this.speed = MIN_SPEED;
         this.invulnTimer = 2;
         this.steerHistory = [];
@@ -713,8 +723,9 @@ export class GameScene extends Phaser.Scene {
     this.chiliOverlay.setAlpha(this.chiliTimer > 0 ? 0.12 + 0.08 * Math.sin(now * 0.02) : 0);
 
     this.lat += (steer * STEER_SPEED + fx.steerDrift) * dt;
-    const offRoad = this.lat < 0 || this.lat > ROAD_WIDTH;
-    if (this.lat < -SHOULDER || this.lat > ROAD_WIDTH + SHOULDER) {
+    const dev = this.lat - this.centerLat(this.d);
+    const offRoad = Math.abs(dev) > this.roadW / 2;
+    if (Math.abs(dev) > this.roadW / 2 + SHOULDER) {
       this.crash();
       this.layoutWorld();
       return;
@@ -735,7 +746,9 @@ export class GameScene extends Phaser.Scene {
     for (const b of this.routeDef.breweries) {
       if (this.visited.has(b.name)) continue;
       const nearD = Math.abs(b.d - this.d) < 18;
-      const onSide = b.side === "left" ? this.lat < 16 : this.lat > ROAD_WIDTH - 16;
+      const rel = this.lat - this.centerLat(this.d);
+      const onSide =
+        b.side === "left" ? rel < -this.roadW / 2 + 16 : rel > this.roadW / 2 - 16;
       if (nearD && onSide) {
         this.enterStop(b);
         return;
@@ -745,7 +758,11 @@ export class GameScene extends Phaser.Scene {
     // Cone collisions.
     if (this.invulnTimer <= 0) {
       for (const p of this.props) {
-        if (p.kind === "cone" && Math.abs(p.d - this.d) < 10 && Math.abs(p.lat - this.lat) < 9) {
+        if (
+          p.kind === "cone" &&
+          Math.abs(p.d - this.d) < 10 &&
+          Math.abs(this.centerLat(p.d) + p.lat - this.lat) < 9
+        ) {
           this.crash();
           this.layoutWorld();
           return;
@@ -778,7 +795,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Backdrop life: subtle Flatirons parallax, drifting clouds.
-    this.flatirons.x = 10 - (this.lat - ROAD_WIDTH / 2) * 0.18;
+    this.flatirons.x = 10 - this.lat * 0.18;
     for (const c of this.clouds) {
       c.x -= (c.scale < 1 ? 2 : 3.2) * dt;
       if (c.x < -20) c.x = GAME_WIDTH + 20;
@@ -794,9 +811,14 @@ export class GameScene extends Phaser.Scene {
 
   // --- NPCs, pickups, and the law --------------------------------------
 
+  // Road centerline offset at distance d.
+  private centerLat(d: number): number {
+    return this.routeDef.curveAmp * Math.sin(d * this.routeDef.curveFreq);
+  }
+
   private npcLat(kind: NpcKind): number {
-    if (kind === "door") return Math.random() < 0.5 ? 8 : ROAD_WIDTH - 8;
-    return Phaser.Math.FloatBetween(14, ROAD_WIDTH - 14);
+    if (kind === "door") return (Math.random() < 0.5 ? -1 : 1) * (this.roadW / 2 - 8);
+    return Phaser.Math.FloatBetween(-this.roadW / 2 + 14, this.roadW / 2 - 14);
   }
 
   private makeNpcSprite(kind: NpcKind): Npc["obj"] {
@@ -834,7 +856,7 @@ export class GameScene extends Phaser.Scene {
     for (const n of this.npcs) {
       if (n.latVel > 0) {
         n.lat += n.latVel * n.latDir * dt;
-        if (n.lat < 6 || n.lat > ROAD_WIDTH - 6) n.latDir *= -1;
+        if (Math.abs(n.lat) > this.roadW / 2 - 6) n.latDir *= -1;
         n.obj.setFlipX(n.latDir < 0);
       }
       while (n.d < this.d - 100) {
@@ -844,7 +866,7 @@ export class GameScene extends Phaser.Scene {
         n.passed = false;
       }
       const dd = Math.abs(n.d - this.d);
-      const dl = Math.abs(n.lat - this.lat);
+      const dl = Math.abs(this.centerLat(n.d) + n.lat - this.lat);
       if (dd < 10) {
         if (dl < 9 && this.invulnTimer <= 0) {
           this.crash();
@@ -867,9 +889,12 @@ export class GameScene extends Phaser.Scene {
     for (const p of this.pickups) {
       while (p.d < this.d - 100) {
         p.d += p.span;
-        p.lat = Phaser.Math.FloatBetween(14, ROAD_WIDTH - 14);
+        p.lat = Phaser.Math.FloatBetween(-this.roadW / 2 + 14, this.roadW / 2 - 14);
       }
-      if (Math.abs(p.d - this.d) < 12 && Math.abs(p.lat - this.lat) < 10) {
+      if (
+        Math.abs(p.d - this.d) < 12 &&
+        Math.abs(this.centerLat(p.d) + p.lat - this.lat) < 10
+      ) {
         this.collect(p);
         p.d += p.span; // consume: recycle far ahead
       }
@@ -1413,29 +1438,37 @@ export class GameScene extends Phaser.Scene {
     return "sober";
   }
 
-  // Project every prop and fixture from route space to the screen.
+  // Project every prop and fixture from route space to the screen. All
+  // stored lats are relative to the curving centerline except roadsegs
+  // and stripes (which ARE the centerline) and curbs (edge signs).
   private layoutWorld(): void {
-    const roadOff = ROAD_WIDTH / 2 - this.lat;
-    this.road.setPosition(ANCHOR.x + CROSS.x * roadOff, ANCHOR.y + CROSS.y * roadOff);
-
     for (const p of this.props) {
-      while (p.d < this.d - 100) {
+      while (p.d < this.d - 110) {
         p.d += p.span;
-        if (p.kind === "cone") p.lat = Phaser.Math.FloatBetween(12, ROAD_WIDTH - 12);
+        if (p.kind === "cone") {
+          p.lat = Phaser.Math.FloatBetween(-this.roadW / 2 + 12, this.roadW / 2 - 12);
+        }
       }
-      this.place(p.obj, p.d, p.lat);
+      const center = this.centerLat(p.d);
+      let abs: number;
+      if (p.kind === "roadseg" || p.kind === "stripe") abs = center;
+      else if (p.kind === "curb") abs = center + p.lat * (this.roadW / 2 + 4);
+      else abs = center + p.lat;
+      this.place(p.obj, p.d, abs);
+      if (p.kind === "roadseg") p.obj.setDepth(-20);
+      else if (p.kind === "stripe") p.obj.setDepth(-15);
     }
     for (const f of this.fixtures) {
-      this.place(f.obj, f.d, f.lat);
+      this.place(f.obj, f.d, this.centerLat(f.d) + f.lat);
     }
     for (const n of this.npcs) {
-      this.place(n.obj, n.d, n.lat);
+      this.place(n.obj, n.d, this.centerLat(n.d) + n.lat);
     }
     for (const p of this.pickups) {
-      this.place(p.obj, p.d, p.lat);
+      this.place(p.obj, p.d, this.centerLat(p.d) + p.lat);
     }
     for (const c of this.cops) {
-      this.place(c.obj, c.d, c.lat);
+      this.place(c.obj, c.d, this.centerLat(c.d) + c.lat);
     }
   }
 
