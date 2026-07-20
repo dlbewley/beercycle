@@ -3,7 +3,8 @@ import type { AvatarId } from "../art/pixelart";
 // Per-rider voice lines (beercycle-bmi). Personalities per the avatar
 // epic: DWNWRD hacker/vegan, HOSKINS prankster, DRELLIS beer snob.
 
-export type VocabEvent = "enter" | "perfect" | "crash" | "bust" | "finish" | "water";
+export type VocabEvent =
+  | "enter" | "perfect" | "crash" | "bust" | "finish" | "water" | "cutoff";
 
 const LINES: Record<AvatarId, Record<VocabEvent, string[]>> = {
   dwnwrd: {
@@ -13,6 +14,7 @@ const LINES: Record<AvatarId, Record<VocabEvent, string[]>> = {
     bust: ["I KNOW MY RIGHTS (I DON'T)", "IT'S OPEN SOURCE, OFFICER."],
     finish: ["SHIP IT.", "MERGED TO MAIN."],
     water: ["HYDRATION IS PRAXIS."],
+    cutoff: ["429: TOO MANY REQUESTS.", "FINE. I HAVE COLD BREW AT HOME."],
   },
   hoskins: {
     enter: ["FIRST ROUND'S ON DRELLIS.", "DO YOU DO REFILLS?", "HELMETS ARE FOR COWARDS."],
@@ -21,6 +23,7 @@ const LINES: Record<AvatarId, Record<VocabEvent, string[]>> = {
     bust: ["OFFICER, FUNNY STORY—", "THIS ISN'T EVEN MY BIKE."],
     finish: ["AGAIN! AGAIN!", "IS THERE A TROPHY?"],
     water: ["THIS BEER TASTES WRONG."],
+    cutoff: ["YOU'LL HEAR FROM MY LAWYER (DRELLIS).", "I'VE BEEN CUT OFF IN NICER BARS."],
   },
   drellis: {
     enter: ["LET ME SEE THE TAP LIST.", "A FLIGHT, IF YOU PLEASE.", "NOTES OF... COMMERCE."],
@@ -29,6 +32,7 @@ const LINES: Record<AvatarId, Record<VocabEvent, string[]>> = {
     bust: ["THIS IS TECHNICALLY A CLASS B.", "I DEMAND A SOMMELIER."],
     finish: ["A RESPECTABLE SESSION.", "SUFFICIENTLY PEATED."],
     water: ["A PALATE CLEANSER."],
+    cutoff: ["PROBABLY WISE.", "A RESPONSIBLE POUR COUNT."],
   },
 };
 

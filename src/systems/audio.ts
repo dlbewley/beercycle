@@ -5,7 +5,9 @@
 // The Buzz link: setDetune() warbles both music and SFX pitch as the
 // meter climbs, per the design doc.
 
-type SfxName = "bell" | "crash" | "pour" | "pickup" | "chug" | "bust" | "lastcall";
+type SfxName =
+  | "bell" | "crash" | "pour" | "pickup" | "chug" | "bust" | "lastcall"
+  | "thunk" | "buzzer";
 
 const BASS = [110, 110, 165, 110, 147, 110, 165, 196];
 const LEAD = [440, 523, 659, 523, 587, 494, 523, 392, 440, 523, 659, 784, 659, 587, 523, 494];
@@ -72,6 +74,13 @@ class AudioSystem {
     }
   }
 
+  // Pitched blip for the flight-tasting memory game (one pitch per glass).
+  blip(index: number): void {
+    const ctx = this.ensure();
+    if (!ctx || this.muted) return;
+    this.note([392, 494, 587][index % 3], ctx.currentTime, 0.16, "square", 0.12);
+  }
+
   sfx(name: SfxName): void {
     const ctx = this.ensure();
     if (!ctx || this.muted) return;
@@ -104,6 +113,14 @@ class AudioSystem {
           this.note(700, t + i * 0.3, 0.14, "square", 0.12);
           this.note(500, t + i * 0.3 + 0.15, 0.14, "square", 0.12);
         }
+        break;
+      case "thunk": // dart hitting the board
+        this.note(140, t, 0.07, "square", 0.2);
+        this.noise(t, 0.06, 0.12);
+        break;
+      case "buzzer": // wrong answer
+        this.note(160, t, 0.25, "sawtooth", 0.14);
+        this.note(151, t, 0.25, "sawtooth", 0.1);
         break;
       case "lastcall": {
         // Sad trombone: three descending notes, then a long wobbly one.

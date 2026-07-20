@@ -26,6 +26,7 @@ const MAX_SPEED = 190;
 const OFFROAD_SPEED_CAP = 65;
 const STEER_SPEED = 95;
 const START_LIVES = 3;
+const TAB_LIMIT = 3; // beers per brewery stop before the bartender cuts you off
 
 type WorldObj =
   | Phaser.GameObjects.Shape
@@ -144,11 +145,31 @@ export class GameScene extends Phaser.Scene {
   private markerPhase = 0;
   private markerSpeed = 2.4;
   private resultTimer = 0;
-  private chugPhase: "pick" | "active" | "result" = "pick";
+  private chugPhase: "pick" | "active" | "result" | "darts" | "flight" = "pick";
   private currentBrewery: Brewery | null = null;
   private tapIndex = 0;
   private fillLevel = 0;
   private jitterCd = 0;
+  // Stop flow (beercycle-49i): the tab caps beers per stop; one foam
+  // mulligan per stop on an overfilled pour; results auto-advance.
+  private tabRemaining = TAB_LIMIT;
+  private mulliganUsed = false;
+  private houseGamePlayed = false;
+  private idleTimer = 0;
+  private queuedSpace = false;
+  private queuedEnter = false;
+  // Darts state.
+  private dartNum = 1;
+  private dartTotal = 0;
+  private dartPhaseX = 0;
+  private dartPhaseY = 0;
+  // Flight-tasting state.
+  private flightSeq: number[] = [];
+  private flightShow = 0;
+  private flightGuess = -1;
+  private flightTimer = 0;
+  private flightTotal = 0;
+  private flightTapGuess = -1;
   // Post-drink effects on riding.
   private heavyTimer = 0;
   private boostTimer = 0;
@@ -187,6 +208,15 @@ export class GameScene extends Phaser.Scene {
   private speedDownHeld = false;
   private chugAnotherBtn!: Phaser.GameObjects.Text;
   private chugRideOnBtn!: Phaser.GameObjects.Text;
+  private chugMeterBg!: Phaser.GameObjects.Rectangle;
+  private houseBtn!: Phaser.GameObjects.Text;
+  private dartboard!: Phaser.GameObjects.Image;
+  private crosshair!: Phaser.GameObjects.Container;
+  private dartMarks: Phaser.GameObjects.Rectangle[] = [];
+  private oneKey!: Phaser.Input.Keyboard.Key;
+  private twoKey!: Phaser.Input.Keyboard.Key;
+  private threeKey!: Phaser.Input.Keyboard.Key;
+  private gKey!: Phaser.Input.Keyboard.Key;
 
   constructor() {
     super("Game");
@@ -399,6 +429,10 @@ export class GameScene extends Phaser.Scene {
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.enterKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+    this.oneKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ONE);
+    this.twoKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.TWO);
+    this.threeKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.THREE);
+    this.gKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.G);
     this.touchTap = false;
     this.touchEnter = false;
     this.speedUpHeld = false;
@@ -554,9 +588,30 @@ export class GameScene extends Phaser.Scene {
       this.tapSlots.push({ box, glass, label });
     }
 
+    this.houseBtn = this.add
+      .text(108, -60, "", style("8px", "#e8c56a"))
+      .setOrigin(0.5)
+      .setInteractive()
+      .on("pointerdown", () => this.startHouseGame());
+
+    this.dartboard = this.add.image(0, 6, "dartboard").setVisible(false);
+    this.crosshair = this.add
+      .container(0, 6, [
+        this.add.rectangle(0, 0, 12, 1, 0xffffff),
+        this.add.rectangle(0, 0, 1, 12, 0xffffff),
+      ])
+      .setVisible(false);
+    this.dartMarks = [];
+    for (let i = 0; i < 3; i++) {
+      this.dartMarks.push(
+        this.add.rectangle(0, 0, 3, 3, 0x1a1a1a).setVisible(false),
+      );
+    }
+
     this.chugInfo = this.add.text(0, 22, "", style("8px", "#cfcfcf")).setOrigin(0.5);
     this.chugFeedback = this.add.text(0, 35, "", style("10px", "#8fd694")).setOrigin(0.5);
     const meterBg = this.add.rectangle(0, 52, 180, 10, 0x222222);
+    this.chugMeterBg = meterBg;
     this.chugFillBar = this.add
       .rectangle(-90, 52, 0, 8, 0xd9a516)
       .setOrigin(0, 0.5)
@@ -583,6 +638,7 @@ export class GameScene extends Phaser.Scene {
       .container(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 4, [
         this.chugPanelBg, this.chugGlyph, this.chugName, this.chugTagline, this.chugEnterLine,
         ...this.tapSlots.flatMap((s) => [s.box, s.glass as Phaser.GameObjects.GameObject, s.label]),
+        this.houseBtn, this.dartboard, this.crosshair, ...this.dartMarks,
         this.chugInfo, this.chugFeedback,
         meterBg, this.chugFillBar, this.chugSweetSpot, this.chugMarker, this.chugPrompt,
         this.chugAnotherBtn, this.chugRideOnBtn,
@@ -877,6 +933,11 @@ export class GameScene extends Phaser.Scene {
     this.streak++;
     this.beerNum = 1;
     this.resultTimer = 0;
+    this.tabRemaining = TAB_LIMIT;
+    this.mulliganUsed = false;
+    this.houseGamePlayed = false;
+    this.queuedSpace = false;
+    this.queuedEnter = false;
     this.bike.rotation = 0;
     audio.sfx("bell");
     this.chugPanel.setVisible(true);
@@ -904,17 +965,38 @@ export class GameScene extends Phaser.Scene {
     this.chugMarker.setVisible(false);
     this.chugSweetSpot.setVisible(false);
     this.chugFillBar.setVisible(false);
-    this.chugFeedback.setText("");
+    this.chugMeterBg.setVisible(true);
+    this.dartboard.setVisible(false);
+    this.crosshair.setVisible(false);
+    for (const m of this.dartMarks) m.setVisible(false);
+    for (const s of this.tapSlots) {
+      s.box.setVisible(true);
+      s.glass.setVisible(true);
+      s.label.setVisible(true);
+    }
+    this.chugFeedback.setText("").setY(35);
     this.chugPrompt.setText("choose a beer, then order");
     this.chugAnotherBtn.setVisible(false);
     this.chugRideOnBtn.setVisible(true);
+    const hg = this.currentBrewery?.houseGame;
+    this.houseBtn.setVisible(!!hg && !this.houseGamePlayed);
+    if (hg) this.houseBtn.setText(`[ ${hg.toUpperCase()} (G) ]`);
     this.touchTap = false;
     this.touchEnter = false;
   }
 
+  private tabLabel(): string {
+    return `TAB ${"O".repeat(this.tabRemaining)}${".".repeat(TAB_LIMIT - this.tabRemaining)}`;
+  }
+
   private onTapSlot(i: number): void {
-    if (this.mode !== "chugging" || this.chugPhase !== "pick") return;
+    if (this.mode !== "chugging") return;
     if (!this.currentBrewery || i >= this.currentBrewery.taps.length) return;
+    if (this.chugPhase === "flight" && this.flightGuess >= 0) {
+      this.flightTapGuess = i;
+      return;
+    }
+    if (this.chugPhase !== "pick") return;
     if (this.tapIndex === i) {
       this.beginChug();
     } else {
@@ -940,7 +1022,7 @@ export class GameScene extends Phaser.Scene {
     });
     const sel = this.selectedBeer;
     this.chugInfo.setText(
-      `${styleLabel(sel)}   BEER #${this.beerNum}   STREAK x${this.streak}` +
+      `${styleLabel(sel)}   ${this.tabLabel()}   STREAK x${this.streak}` +
         `${this.happyHour ? "   HAPPY HOUR 2X" : ""}`,
     );
   }
@@ -979,6 +1061,15 @@ export class GameScene extends Phaser.Scene {
 
   private lockBeer(accuracy: number, overflow: boolean): void {
     const beer = this.selectedBeer;
+    // One foam mulligan per stop on an overfilled pour.
+    if (overflow && !this.mulliganUsed) {
+      this.mulliganUsed = true;
+      this.fillLevel = 0;
+      this.prevPourHeld = false;
+      audio.sfx("buzzer");
+      this.chugFeedback.setText("FOAM! ONE MULLIGAN — pour again");
+      return; // stay in the active fill phase
+    }
     const perfect = !overflow && accuracy > 0.85;
     let points = Math.round(pointsFor(beer) * (0.4 + 0.6 * accuracy) * this.streak);
     if (perfect) points = Math.round(points * 1.5);
@@ -999,15 +1090,168 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.chugFeedback.setText(overflow ? `FOAM. EVERYWHERE. +${points}` : `+${points}`);
     }
+    this.tabRemaining--;
+    this.chugInfo.setText(
+      `${styleLabel(beer)}   ${this.tabLabel()}   STREAK x${this.streak}` +
+        `${this.happyHour ? "   HAPPY HOUR 2X" : ""}`,
+    );
     this.chugPhase = "result";
-    this.resultTimer = 0.9;
+    this.resultTimer = 0.7;
     this.chugPrompt.setText("");
     this.touchTap = false;
+  }
+
+  // --- House mini-games (beercycle-49i) --------------------------------
+
+  private startHouseGame(): void {
+    if (this.mode !== "chugging" || this.chugPhase !== "pick") return;
+    const hg = this.currentBrewery?.houseGame;
+    if (!hg || this.houseGamePlayed) return;
+    for (const s of this.tapSlots) {
+      s.box.setVisible(hg === "flight");
+      s.glass.setVisible(hg === "flight");
+      s.label.setVisible(hg === "flight");
+    }
+    this.houseBtn.setVisible(false);
+    this.chugRideOnBtn.setVisible(false);
+    this.chugMeterBg.setVisible(false);
+    this.touchTap = false;
+    if (hg === "darts") {
+      this.chugPhase = "darts";
+      this.dartNum = 1;
+      this.dartTotal = 0;
+      this.dartPhaseX = Math.random() * 6;
+      this.dartPhaseY = Math.random() * 6;
+      this.dartboard.setVisible(true);
+      this.crosshair.setVisible(true);
+      this.chugInfo.setText("");
+      this.chugFeedback.setText("").setY(50);
+      this.chugPrompt.setText("dart 1 of 3 — SPACE / tap to throw");
+    } else {
+      this.chugPhase = "flight";
+      this.flightSeq = Array.from({ length: 4 }, () =>
+        Phaser.Math.Between(0, this.currentBrewery!.taps.length - 1),
+      );
+      this.flightShow = 0;
+      this.flightGuess = -1;
+      this.flightTimer = 0.6;
+      this.flightTotal = 0;
+      this.flightTapGuess = -1;
+      this.chugInfo.setText(`FLIGHT   STREAK x${this.streak}`);
+      this.chugFeedback.setText("");
+      this.chugPrompt.setText("watch the flight...");
+    }
+  }
+
+  private flashSlot(i: number): void {
+    const slot = this.tapSlots[i];
+    if (!slot) return;
+    slot.box.setFillStyle(0xffffff, 0.4);
+    this.time.delayedCall(220, () => slot.box.setFillStyle(0xffffff, 0.05));
+  }
+
+  private finishHouseGame(message: string): void {
+    this.houseGamePlayed = true;
+    this.dartboard.setVisible(false);
+    this.crosshair.setVisible(false);
+    for (const m of this.dartMarks) m.setVisible(false);
+    this.chugFeedback.setText(message).setY(35);
+    this.chugPhase = "result";
+    this.resultTimer = 0.7;
+    this.chugPrompt.setText("");
+    this.touchTap = false;
+  }
+
+  private dartsUpdate(dt: number): void {
+    this.dartPhaseX += dt * (1.6 + 0.4 * this.dartNum);
+    this.dartPhaseY += dt * (2.3 + 0.5 * this.dartNum);
+    const dx = Math.sin(this.dartPhaseX) * 55;
+    const dy = Math.sin(this.dartPhaseY) * 30;
+    this.crosshair.setPosition(dx, 6 + dy);
+    if (Phaser.Input.Keyboard.JustDown(this.spaceKey) || this.consumeTap()) {
+      const r = Math.hypot(dx, dy);
+      let pts: number;
+      let label: string;
+      if (r < 7) { pts = 150; label = "BULLSEYE!"; }
+      else if (r < 15) { pts = 90; label = "inner ring"; }
+      else if (r < 25) { pts = 60; label = "on the board"; }
+      else if (r < 34) { pts = 30; label = "outer ring"; }
+      else { pts = 10; label = "you hit the wall"; }
+      pts *= this.streak;
+      this.dartTotal += pts;
+      audio.sfx("thunk");
+      this.dartMarks[this.dartNum - 1].setPosition(dx, 6 + dy).setVisible(true);
+      this.chugFeedback.setText(`${label} +${pts}`);
+      if (this.dartNum >= 3) {
+        this.score += this.dartTotal;
+        this.buzz.drink(6); // you sip between throws
+        this.finishHouseGame(`DARTS TOTAL +${this.dartTotal}`);
+      } else {
+        this.dartNum++;
+        this.chugPrompt.setText(`dart ${this.dartNum} of 3 — SPACE / tap to throw`);
+      }
+    }
+  }
+
+  private flightUpdate(dt: number): void {
+    if (this.flightGuess < 0) {
+      // Showing the sequence.
+      this.flightTimer -= dt;
+      if (this.flightTimer > 0) return;
+      if (this.flightShow < this.flightSeq.length) {
+        const idx = this.flightSeq[this.flightShow];
+        this.flashSlot(idx);
+        audio.blip(idx);
+        this.flightShow++;
+        this.flightTimer = 0.55;
+      } else {
+        this.flightGuess = 0;
+        this.flightTapGuess = -1;
+        this.chugPrompt.setText("your turn — repeat the order (tap or 1/2/3)");
+      }
+      return;
+    }
+    let guess = -1;
+    if (Phaser.Input.Keyboard.JustDown(this.oneKey)) guess = 0;
+    else if (Phaser.Input.Keyboard.JustDown(this.twoKey)) guess = 1;
+    else if (Phaser.Input.Keyboard.JustDown(this.threeKey)) guess = 2;
+    else if (this.flightTapGuess >= 0) {
+      guess = this.flightTapGuess;
+      this.flightTapGuess = -1;
+    }
+    if (guess < 0 || guess >= this.currentBrewery!.taps.length) return;
+    if (guess === this.flightSeq[this.flightGuess]) {
+      this.flashSlot(guess);
+      audio.blip(guess);
+      const pts = 40 * this.streak;
+      this.flightTotal += pts;
+      this.score += pts;
+      this.flightGuess++;
+      if (this.flightGuess >= this.flightSeq.length) {
+        const bonus = 80 * this.streak;
+        this.flightTotal += bonus;
+        this.score += bonus;
+        this.buzz.drink(8); // it's still four beers, tiny ones
+        this.finishHouseGame(`FLIGHT COMPLETE +${this.flightTotal}`);
+      }
+    } else {
+      audio.sfx("buzzer");
+      this.finishHouseGame(`PALATE CONFUSION +${this.flightTotal}`);
+    }
   }
 
   private chugUpdate(dt: number): void {
     this.smugTimer = Math.max(0, this.smugTimer - dt);
     const space = this.spaceKey;
+
+    if (this.chugPhase === "darts") {
+      this.dartsUpdate(dt);
+      return;
+    }
+    if (this.chugPhase === "flight") {
+      this.flightUpdate(dt);
+      return;
+    }
 
     if (this.chugPhase === "pick") {
       const taps = this.currentBrewery!.taps;
@@ -1017,6 +1261,8 @@ export class GameScene extends Phaser.Scene {
       } else if (Phaser.Input.Keyboard.JustDown(this.cursors.right)) {
         this.tapIndex = (this.tapIndex + 1) % taps.length;
         this.refreshTapUI();
+      } else if (Phaser.Input.Keyboard.JustDown(this.gKey)) {
+        this.startHouseGame();
       } else if (Phaser.Input.Keyboard.JustDown(space) || this.consumeTap()) {
         this.beginChug();
       } else if (Phaser.Input.Keyboard.JustDown(this.enterKey) || this.consumeEnterTap()) {
@@ -1062,26 +1308,62 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    // Result phase.
+    // Result phase. Inputs during the flash are buffered, not dropped.
     if (this.resultTimer > 0) {
       this.resultTimer -= dt;
-      this.touchTap = false;
-      this.touchEnter = false;
+      if (Phaser.Input.Keyboard.JustDown(space) || this.consumeTap()) this.queuedSpace = true;
+      if (Phaser.Input.Keyboard.JustDown(this.enterKey) || this.consumeEnterTap()) {
+        this.queuedEnter = true;
+      }
       if (this.resultTimer <= 0) {
-        this.chugPrompt.setText("SPACE / ENTER");
-        this.chugAnotherBtn.setVisible(true);
-        this.chugRideOnBtn.setVisible(true);
+        this.idleTimer = 0;
+        if (this.queuedEnter) {
+          this.queuedEnter = false;
+          this.queuedSpace = false;
+          this.exitStop();
+          return;
+        }
+        if (this.queuedSpace && this.tabRemaining > 0) {
+          this.queuedSpace = false;
+          this.nextRound();
+          return;
+        }
+        this.queuedSpace = false;
+        if (this.tabRemaining <= 0) {
+          // The bartender has opinions.
+          this.chugFeedback.setText(`"${vocabLine(this.avatarId, "cutoff")}"`);
+          this.chugPrompt.setText("that's your tab");
+          this.chugAnotherBtn.setVisible(false);
+          this.chugRideOnBtn.setVisible(true);
+        } else {
+          this.chugPrompt.setText("SPACE / ENTER");
+          this.chugAnotherBtn.setVisible(true);
+          this.chugRideOnBtn.setVisible(true);
+        }
       }
       return;
     }
+    this.idleTimer += dt;
     if (Phaser.Input.Keyboard.JustDown(space) || this.consumeTap()) {
-      this.beerNum++;
-      this.chugPhase = "pick";
-      this.pickPhaseUI();
-      this.refreshTapUI();
-    } else if (Phaser.Input.Keyboard.JustDown(this.enterKey) || this.consumeEnterTap()) {
-      this.exitStop();
+      if (this.tabRemaining > 0) this.nextRound();
+      else this.exitStop();
+      return;
     }
+    if (Phaser.Input.Keyboard.JustDown(this.enterKey) || this.consumeEnterTap()) {
+      this.exitStop();
+      return;
+    }
+    // Keep the pace: drift back to the tap list on idle.
+    if (this.idleTimer > 2.2 && this.tabRemaining > 0) {
+      this.nextRound();
+    }
+  }
+
+  private nextRound(): void {
+    this.beerNum++;
+    this.chugPhase = "pick";
+    this.pickPhaseUI();
+    this.refreshTapUI();
   }
 
   private exitStop(): void {

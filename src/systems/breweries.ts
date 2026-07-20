@@ -4,6 +4,8 @@ import type { BeerDef } from "./beers";
 // d is route distance; side is which road edge the stop zone sits on.
 // accent/glyph/tagline theme the chug panel; taps are the beer menu.
 
+export type HouseGame = "darts" | "flight";
+
 export interface Brewery {
   name: string;
   d: number;
@@ -12,4 +14,5 @@ export interface Brewery {
   glyph: string; // glyph texture suffix, e.g. "moon" -> "glyph_moon"
   tagline: string;
   taps: BeerDef[];
+  houseGame?: HouseGame; // optional venue mini-game, once per stop
 }

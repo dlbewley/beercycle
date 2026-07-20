@@ -445,6 +445,24 @@ const GLYPHS: Record<string, string[]> = {
   halo: [".######.", "#......#", ".######.", "........", "...##...", "..####..", "..####..", "........"],
 };
 
+function makeDartboard(scene: Phaser.Scene): void {
+  if (scene.textures.exists("dartboard")) return;
+  const canvas = scene.textures.createCanvas("dartboard", 76, 76)!;
+  const ctx = canvas.getContext();
+  const ring = (r: number, color: string) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(38, 38, r, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  ring(36, "#1a1a1a");
+  ring(34, "#f2ead8");
+  ring(24, "#4f7a36");
+  ring(14, "#d9a516");
+  ring(6, "#c23b2a");
+  canvas.refresh();
+}
+
 function makeBeerAndGlyphTextures(scene: Phaser.Scene): void {
   for (const route of ROUTES) {
     for (const b of route.breweries) {
@@ -711,4 +729,5 @@ export function createGameTextures(scene: Phaser.Scene): void {
   makeAvatarTextures(scene);
   makeBikeVariants(scene);
   makeBeerAndGlyphTextures(scene);
+  makeDartboard(scene);
 }

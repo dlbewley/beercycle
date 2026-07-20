@@ -35,6 +35,7 @@ export const ROUTES: RouteDef[] = [
         accent: 0xe07b39,
         glyph: "moon",
         tagline: "cash only. it's a vibe.",
+        houseGame: "darts",
         taps: [
           { id: "kinda", name: "KINDA COLORADO ALE", style: "pale", abv: 5.2, color: "#d9942b", head: "#f7f0dc", shape: "pint" },
           { id: "lunarhaze", name: "LUNAR HAZE", style: "ipa", abv: 7.1, color: "#e8a83c", head: "#f7f0dc", shape: "pint" },
@@ -48,6 +49,7 @@ export const ROUTES: RouteDef[] = [
         accent: 0xa03a4a,
         glyph: "diamond",
         tagline: "ah, belgium.",
+        houseGame: "flight",
         taps: [
           { id: "oudbruin", name: "OUD BRUIN YOU IN", style: "sour", abv: 6.0, color: "#a83248", head: "#f2d8d8", shape: "tulip" },
           { id: "witte", name: "WITTE OR NOT", style: "wit", abv: 4.9, color: "#f0e4b0", head: "#ffffff", shape: "tulip" },
@@ -61,6 +63,7 @@ export const ROUTES: RouteDef[] = [
         accent: 0xd9a516,
         glyph: "sun",
         tagline: "bolder since 1979.",
+        houseGame: "darts",
         taps: [
           { id: "buffgold", name: "BUFF GOLD", style: "lager", abv: 4.6, color: "#e8c84a", head: "#ffffff", shape: "pint" },
           { id: "pucksporter", name: "PUCK'S PORTER", style: "porter", abv: 5.9, color: "#3a2418", head: "#d9b98a", shape: "nonic" },
@@ -101,6 +104,7 @@ export const ROUTES: RouteDef[] = [
         accent: 0x6fae4e,
         glyph: "flower",
         tagline: "dog friendly. extremely.",
+        houseGame: "flight",
         taps: [
           { id: "foothillsfunk", name: "FOOTHILLS FUNK", style: "sour", abv: 5.5, color: "#d465a0", head: "#f7e0ec", shape: "tulip" },
           { id: "trailhead", name: "TRAILHEAD SAISON", style: "saison", abv: 6.3, color: "#e0c060", head: "#f7f0dc", shape: "tulip" },
@@ -129,6 +133,7 @@ export const ROUTES: RouteDef[] = [
         accent: 0x7a5fae,
         glyph: "bird",
         tagline: "barrels all the way down.",
+        houseGame: "flight",
         taps: [
           { id: "ravens", name: "RAVEN'S RESERVE", style: "stout", abv: 13.5, color: "#191014", head: "#c9a86a", shape: "snifter" },
           { id: "scoundrel", name: "PALE SCOUNDREL", style: "wit", abv: 5.1, color: "#f0e4b0", head: "#ffffff", shape: "tulip" },
@@ -141,6 +146,7 @@ export const ROUTES: RouteDef[] = [
         accent: 0xc23b2a,
         glyph: "pine",
         tagline: "we put WHAT in it?",
+        houseGame: "darts",
         taps: [
           { id: "ghostface", name: "GHOST FACE CHILLAH", style: "chili", abv: 5.0, color: "#c23b2a", head: "#f2d8c8", shape: "pint" },
           { id: "billyrabbit", name: "BILLY RABBIT BROWN", style: "brown", abv: 5.4, color: "#5a3a22", head: "#e0c8a8", shape: "pint" },
