@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
     <title>BeerCycle</title>
     <style>
       html,
@@ -11,6 +14,8 @@
         padding: 0;
         background: #1a1423;
         height: 100%;
+        touch-action: none;
+        overscroll-behavior: none;
       }
       #game {
         width: 100vw;
@@ -18,6 +23,7 @@
       }
       canvas {
         image-rendering: pixelated;
+        touch-action: none;
       }
     </style>
   </head>

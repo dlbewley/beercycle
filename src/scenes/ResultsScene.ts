@@ -108,8 +108,8 @@ export class ResultsScene extends Phaser.Scene {
         .text(
           0, 96,
           isFinal
-            ? "PRESS SPACE FOR MENU"
-            : `NEXT STOP: ${data.nextRouteName} — PRESS SPACE TO RIDE ON`,
+            ? "SPACE OR TAP FOR MENU"
+            : `NEXT STOP: ${data.nextRouteName} — SPACE OR TAP TO RIDE ON`,
           style("9px", isFinal ? INK : "#8a2b2b"),
         )
         .setOrigin(0.5),
@@ -125,12 +125,17 @@ export class ResultsScene extends Phaser.Scene {
       ease: "Cubic.easeOut",
     });
 
-    this.input.keyboard?.once("keydown-SPACE", () => {
+    let advanced = false;
+    const advance = () => {
+      if (advanced) return;
+      advanced = true;
       if (data.carry) {
         this.scene.start("Game", data.carry);
       } else {
         this.scene.start("Menu");
       }
-    });
+    };
+    this.input.keyboard?.once("keydown-SPACE", advance);
+    this.input.once("pointerdown", advance);
   }
 }

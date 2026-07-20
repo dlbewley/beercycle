@@ -35,12 +35,25 @@ export class MenuScene extends Phaser.Scene {
 
     const colX = 100;
     this.add
-      .text(colX, 172, "< choose your rider >", {
+      .text(colX, 172, "choose your rider", {
         fontFamily: "monospace",
         fontSize: "8px",
         color: "#7a7a7a",
       })
       .setOrigin(0.5);
+
+    // Tappable (and clickable) select arrows.
+    const arrow = (x: number, dir: number, glyph: string) =>
+      this.add
+        .text(x, 216, glyph, { fontFamily: "monospace", fontSize: "18px", color: "#f7b32b" })
+        .setOrigin(0.5)
+        .setInteractive({ useHandCursor: true })
+        .on("pointerdown", () => {
+          this.avatarIndex = (this.avatarIndex + dir + AVATARS.length) % AVATARS.length;
+          this.refreshAvatar();
+        });
+    arrow(colX - 44, -1, "<");
+    arrow(colX + 44, 1, ">");
     this.nameText = this.add
       .text(colX, 184, "", { fontFamily: "monospace", fontSize: "10px", color: "#f7b32b" })
       .setOrigin(0.5);
@@ -111,7 +124,7 @@ export class MenuScene extends Phaser.Scene {
     });
 
     this.add
-      .text(cx, 142, "PRESS SPACE TO RIDE", {
+      .text(cx, 142, "PRESS SPACE OR TAP TO RIDE", {
         fontFamily: "monospace",
         fontSize: "14px",
         color: "#ffffff",
@@ -135,11 +148,22 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(1, 0.5);
 
     this.input.keyboard?.on("keydown-M", () => audio.toggleMute());
-    this.input.keyboard?.once("keydown-SPACE", () => {
+    let started = false;
+    const startRide = () => {
+      if (started) return;
+      started = true;
       audio.startMusic();
       audio.sfx("bell");
       this.scene.start("Game");
-    });
+    };
+    this.input.keyboard?.once("keydown-SPACE", startRide);
+    // Tap anywhere that isn't an interactive control to ride.
+    this.input.on(
+      "pointerdown",
+      (_p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+        if (over.length === 0) startRide();
+      },
+    );
   }
 
   private refreshAvatar(): void {

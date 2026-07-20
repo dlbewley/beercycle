@@ -178,6 +178,16 @@ export class GameScene extends Phaser.Scene {
   }> = [];
   private chiliOverlay!: Phaser.GameObjects.Rectangle;
 
+  // Touch input (beercycle-bkg): one-shot tap flags feed the same state
+  // machine the keyboard uses; pointer position steers while riding.
+  private touchTap = false;
+  private touchEnter = false;
+  private prevPourHeld = false;
+  private speedUpHeld = false;
+  private speedDownHeld = false;
+  private chugAnotherBtn!: Phaser.GameObjects.Text;
+  private chugRideOnBtn!: Phaser.GameObjects.Text;
+
   constructor() {
     super("Game");
   }
@@ -389,6 +399,11 @@ export class GameScene extends Phaser.Scene {
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.enterKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+    this.touchTap = false;
+    this.touchEnter = false;
+    this.speedUpHeld = false;
+    this.speedDownHeld = false;
+    this.makeSpeedButtons();
     this.paused = false;
     this.pauseText = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, "PAUSED", {
@@ -413,6 +428,59 @@ export class GameScene extends Phaser.Scene {
       this.input.keyboard!.on("keydown-B", () => this.buzz.drink(15));
       this.input.keyboard!.on("keydown-N", () => this.buzz.sober(15));
     }
+  }
+
+  // On-screen speed controls, bottom-right. Useful for mouse too, so
+  // they're always visible (subtly).
+  private makeSpeedButtons(): void {
+    const mk = (y: number, label: string, setHeld: (v: boolean) => void) => {
+      const t = this.add
+        .text(GAME_WIDTH - 26, y, label, {
+          fontFamily: "monospace",
+          fontSize: "14px",
+          color: "#ffffff",
+          backgroundColor: "#14101c",
+        })
+        .setOrigin(0.5)
+        .setPadding(10, 6, 10, 6)
+        .setScrollFactor(0)
+        .setDepth(1001)
+        .setAlpha(0.65)
+        .setInteractive();
+      t.on("pointerdown", () => setHeld(true));
+      t.on("pointerup", () => setHeld(false));
+      t.on("pointerout", () => setHeld(false));
+    };
+    mk(GAME_HEIGHT - 82, "+", (v) => (this.speedUpHeld = v));
+    mk(GAME_HEIGHT - 44, "-", (v) => (this.speedDownHeld = v));
+  }
+
+  // Any held pointer outside the speed-button corner steers toward it.
+  private touchSteerRaw(): number {
+    for (const p of this.input.manager.pointers) {
+      if (!p.isDown) continue;
+      if (p.x > GAME_WIDTH - 56 && p.y > GAME_HEIGHT - 104) continue;
+      if (p.x < ANCHOR.x - 10) return -1;
+      if (p.x > ANCHOR.x + 10) return 1;
+      return 0;
+    }
+    return 0;
+  }
+
+  private anyPointerDown(): boolean {
+    return this.input.manager.pointers.some((p) => p.isDown);
+  }
+
+  private consumeTap(): boolean {
+    const t = this.touchTap;
+    this.touchTap = false;
+    return t;
+  }
+
+  private consumeEnterTap(): boolean {
+    const t = this.touchEnter;
+    this.touchEnter = false;
+    return t;
   }
 
   private createHud(): void {
@@ -455,7 +523,11 @@ export class GameScene extends Phaser.Scene {
     });
     this.chugPanelBg = this.add
       .rectangle(0, 0, 344, 152, 0x14101c, 0.95)
-      .setStrokeStyle(2, 0xf7b32b);
+      .setStrokeStyle(2, 0xf7b32b)
+      .setInteractive()
+      .on("pointerdown", () => {
+        this.touchTap = true;
+      });
     this.chugGlyph = this.add.image(-100, -60, "glyph_moon");
     this.chugName = this.add.text(0, -60, "", style("13px", "#f7b32b")).setOrigin(0.5);
     this.chugTagline = this.add.text(0, -46, "", style("7px", "#8f8fa0")).setOrigin(0.5);
@@ -464,7 +536,11 @@ export class GameScene extends Phaser.Scene {
     this.tapSlots = [];
     for (let i = 0; i < 3; i++) {
       const x = (i - 1) * 108;
-      const box = this.add.rectangle(x, -6, 100, 40, 0xffffff, 0.05).setStrokeStyle(1, 0x555566);
+      const box = this.add
+        .rectangle(x, -6, 100, 40, 0xffffff, 0.05)
+        .setStrokeStyle(1, 0x555566)
+        .setInteractive()
+        .on("pointerdown", () => this.onTapSlot(i));
       const glass = this.add.image(x - 36, -6, "glass_kinda");
       const label = this.add
         .text(x + 8, -6, "", {
@@ -488,6 +564,20 @@ export class GameScene extends Phaser.Scene {
     this.chugSweetSpot = this.add.rectangle(0, 52, 28, 10, 0x8fd694, 0.5);
     this.chugMarker = this.add.rectangle(0, 52, 4, 16, 0xf7f7e8);
     this.chugPrompt = this.add.text(0, 66, "", style("8px", "#9a9a9a")).setOrigin(0.5);
+    this.chugAnotherBtn = this.add
+      .text(-122, 66, "[ ONE MORE ]", style("8px", "#8fd694"))
+      .setOrigin(0.5)
+      .setInteractive()
+      .on("pointerdown", () => {
+        this.touchTap = true;
+      });
+    this.chugRideOnBtn = this.add
+      .text(122, 66, "[ RIDE ON ]", style("8px", "#f7b32b"))
+      .setOrigin(0.5)
+      .setInteractive()
+      .on("pointerdown", () => {
+        this.touchEnter = true;
+      });
 
     this.chugPanel = this.add
       .container(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 4, [
@@ -495,6 +585,7 @@ export class GameScene extends Phaser.Scene {
         ...this.tapSlots.flatMap((s) => [s.box, s.glass as Phaser.GameObjects.GameObject, s.label]),
         this.chugInfo, this.chugFeedback,
         meterBg, this.chugFillBar, this.chugSweetSpot, this.chugMarker, this.chugPrompt,
+        this.chugAnotherBtn, this.chugRideOnBtn,
       ])
       .setScrollFactor(0)
       .setDepth(1002)
@@ -538,12 +629,13 @@ export class GameScene extends Phaser.Scene {
     let raw = 0;
     if (this.cursors.left.isDown) raw = -1;
     else if (this.cursors.right.isDown) raw = 1;
+    if (raw === 0) raw = this.touchSteerRaw();
     let steer = this.delayedSteer(raw, now, fx.inputLagMs);
     if (fx.mirrored) steer = -steer;
 
     const response = 1 - fx.responseMush;
-    if (this.cursors.up.isDown) this.speed += 120 * response * dt;
-    if (this.cursors.down.isDown) this.speed -= 160 * response * dt;
+    if (this.cursors.up.isDown || this.speedUpHeld) this.speed += 120 * response * dt;
+    if (this.cursors.down.isDown || this.speedDownHeld) this.speed -= 160 * response * dt;
     this.speed = Phaser.Math.Clamp(this.speed, MIN_SPEED, MAX_SPEED);
 
     // Post-drink effects: heavy legs after a stout, refreshed after a
@@ -804,12 +896,31 @@ export class GameScene extends Phaser.Scene {
   private enterPickPhase(): void {
     this.chugPhase = "pick";
     this.tapIndex = 0;
+    this.pickPhaseUI();
+    this.refreshTapUI();
+  }
+
+  private pickPhaseUI(): void {
     this.chugMarker.setVisible(false);
     this.chugSweetSpot.setVisible(false);
     this.chugFillBar.setVisible(false);
     this.chugFeedback.setText("");
-    this.chugPrompt.setText("< > choose your beer    SPACE: order    ENTER: ride on");
-    this.refreshTapUI();
+    this.chugPrompt.setText("choose a beer, then order");
+    this.chugAnotherBtn.setVisible(false);
+    this.chugRideOnBtn.setVisible(true);
+    this.touchTap = false;
+    this.touchEnter = false;
+  }
+
+  private onTapSlot(i: number): void {
+    if (this.mode !== "chugging" || this.chugPhase !== "pick") return;
+    if (!this.currentBrewery || i >= this.currentBrewery.taps.length) return;
+    if (this.tapIndex === i) {
+      this.beginChug();
+    } else {
+      this.tapIndex = i;
+      this.refreshTapUI();
+    }
   }
 
   private refreshTapUI(): void {
@@ -839,6 +950,10 @@ export class GameScene extends Phaser.Scene {
     this.chugPhase = "active";
     this.chugMarker.setVisible(true);
     this.chugSweetSpot.setVisible(true);
+    this.chugAnotherBtn.setVisible(false);
+    this.chugRideOnBtn.setVisible(false);
+    this.touchTap = false;
+    this.prevPourHeld = false;
     const mech = mechanicFor(beer.style);
     if (mech === "fill") {
       // Careful pour: sweet zone sits near the rim.
@@ -849,14 +964,16 @@ export class GameScene extends Phaser.Scene {
       this.chugFillBar.width = 0;
       this.chugSweetSpot.setPosition(0.885 * 180 - 90, 52).setSize(30, 10);
       this.chugMarker.x = -90;
-      this.chugPrompt.setText("HOLD SPACE to pour — release at the line");
+      this.chugPrompt.setText("HOLD (space or touch) to pour — release at the line");
     } else {
       this.markerPhase = Math.random() * Math.PI * 2;
       this.markerSpeed = markerSpeedFor(beer.style) * (1 + 0.22 * (this.beerNum - 1));
       this.jitterCd = 0.4;
       this.chugFillBar.setVisible(false);
       this.chugSweetSpot.setPosition(0, 52).setSize(28, 10);
-      this.chugPrompt.setText(mech === "jitter" ? "SPACE: slam it (it puckers)" : "SPACE: slam it");
+      this.chugPrompt.setText(
+        mech === "jitter" ? "SPACE / tap: slam it (it puckers)" : "SPACE / tap: slam it",
+      );
     }
   }
 
@@ -885,6 +1002,7 @@ export class GameScene extends Phaser.Scene {
     this.chugPhase = "result";
     this.resultTimer = 0.9;
     this.chugPrompt.setText("");
+    this.touchTap = false;
   }
 
   private chugUpdate(dt: number): void {
@@ -899,9 +1017,9 @@ export class GameScene extends Phaser.Scene {
       } else if (Phaser.Input.Keyboard.JustDown(this.cursors.right)) {
         this.tapIndex = (this.tapIndex + 1) % taps.length;
         this.refreshTapUI();
-      } else if (Phaser.Input.Keyboard.JustDown(space)) {
+      } else if (Phaser.Input.Keyboard.JustDown(space) || this.consumeTap()) {
         this.beginChug();
-      } else if (Phaser.Input.Keyboard.JustDown(this.enterKey)) {
+      } else if (Phaser.Input.Keyboard.JustDown(this.enterKey) || this.consumeEnterTap()) {
         this.exitStop();
       }
       return;
@@ -910,11 +1028,15 @@ export class GameScene extends Phaser.Scene {
     if (this.chugPhase === "active") {
       const mech = mechanicFor(this.selectedBeer.style);
       if (mech === "fill") {
-        if (space.isDown) this.fillLevel += 0.85 * dt;
+        const heldNow = space.isDown || this.anyPointerDown();
+        if (heldNow) this.fillLevel += 0.85 * dt;
         const shown = Math.min(this.fillLevel, 1.05);
         this.chugFillBar.width = 180 * shown;
         this.chugMarker.x = -90 + 180 * shown;
-        const released = Phaser.Input.Keyboard.JustUp(space) && this.fillLevel > 0.05;
+        const released =
+          (Phaser.Input.Keyboard.JustUp(space) || (this.prevPourHeld && !heldNow)) &&
+          this.fillLevel > 0.05;
+        this.prevPourHeld = heldNow;
         if (released || this.fillLevel > 1.05) {
           const overflow = this.fillLevel > 1.0;
           const accuracy = overflow
@@ -934,7 +1056,7 @@ export class GameScene extends Phaser.Scene {
       }
       const pos = 0.5 + 0.5 * Math.sin(this.markerPhase);
       this.chugMarker.x = -90 + 180 * pos;
-      if (Phaser.Input.Keyboard.JustDown(space)) {
+      if (Phaser.Input.Keyboard.JustDown(space) || this.consumeTap()) {
         this.lockBeer(1 - Math.abs(pos - 0.5) * 2, false);
       }
       return;
@@ -943,21 +1065,21 @@ export class GameScene extends Phaser.Scene {
     // Result phase.
     if (this.resultTimer > 0) {
       this.resultTimer -= dt;
+      this.touchTap = false;
+      this.touchEnter = false;
       if (this.resultTimer <= 0) {
-        this.chugPrompt.setText("SPACE: another round    ENTER: ride on");
+        this.chugPrompt.setText("SPACE / ENTER");
+        this.chugAnotherBtn.setVisible(true);
+        this.chugRideOnBtn.setVisible(true);
       }
       return;
     }
-    if (Phaser.Input.Keyboard.JustDown(space)) {
+    if (Phaser.Input.Keyboard.JustDown(space) || this.consumeTap()) {
       this.beerNum++;
       this.chugPhase = "pick";
-      this.chugMarker.setVisible(false);
-      this.chugSweetSpot.setVisible(false);
-      this.chugFillBar.setVisible(false);
-      this.chugFeedback.setText("");
-      this.chugPrompt.setText("< > choose your beer    SPACE: order    ENTER: ride on");
+      this.pickPhaseUI();
       this.refreshTapUI();
-    } else if (Phaser.Input.Keyboard.JustDown(this.enterKey)) {
+    } else if (Phaser.Input.Keyboard.JustDown(this.enterKey) || this.consumeEnterTap()) {
       this.exitStop();
     }
   }

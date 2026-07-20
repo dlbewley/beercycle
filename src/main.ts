@@ -22,6 +22,9 @@ const game = new Phaser.Game({
   physics: {
     default: "arcade",
   },
+  input: {
+    activePointers: 3, // steer + speed button simultaneously on touch
+  },
   scene: [BootScene, MenuScene, GameScene, ResultsScene],
 });
 

@@ -149,3 +149,6 @@ polaroid ("the jokers").
    `LeaderboardStore` interface so an online backend can be swapped in
    later without touching game code.
 3. **Keyboard controls only for MVP.** Touch/mobile is post-MVP.
+   *(Delivered post-MVP 2026-07-19: unified pointer input — touch steers
+   toward the finger through the same Buzz pipeline, on-screen +/- speed
+   buttons, tappable tap-lists and panel buttons, tap-to-advance menus.)*
