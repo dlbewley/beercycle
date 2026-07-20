@@ -29,6 +29,7 @@ export const ROUTES: RouteDef[] = [
     grassColor: 0x4a6741,
     breweries: [
       {
+        id: "mountainmoon",
         name: "MOUNTAIN MOON",
         d: 1200,
         side: "left",
@@ -43,6 +44,7 @@ export const ROUTES: RouteDef[] = [
         ],
       },
       {
+        id: "bestflanders",
         name: "BEST FLANDERS",
         d: 2700,
         side: "right",
@@ -57,6 +59,7 @@ export const ROUTES: RouteDef[] = [
         ],
       },
       {
+        id: "bolder",
         name: "BOLDER BEER CO.",
         d: 4200,
         side: "left",
@@ -86,6 +89,7 @@ export const ROUTES: RouteDef[] = [
     // Game-day crowds: it's all pedestrians and loose dogs up here.
     breweries: [
       {
+        id: "upslip",
         name: "UPSLIP BREWING",
         d: 1400,
         side: "right",
@@ -98,6 +102,7 @@ export const ROUTES: RouteDef[] = [
         ],
       },
       {
+        id: "sanitastic",
         name: "SANITASTIC",
         d: 3000,
         side: "left",
@@ -127,6 +132,7 @@ export const ROUTES: RouteDef[] = [
     // Industrial brewery density; watch the loading zones.
     breweries: [
       {
+        id: "aviary",
         name: "AVIARY BREWING",
         d: 1300,
         side: "left",
@@ -140,6 +146,7 @@ export const ROUTES: RouteDef[] = [
         ],
       },
       {
+        id: "twistyspruce",
         name: "TWISTY SPRUCE",
         d: 2900,
         side: "right",
@@ -153,6 +160,7 @@ export const ROUTES: RouteDef[] = [
         ],
       },
       {
+        id: "mildwoods",
         name: "MILD WOODS",
         d: 4300,
         side: "left",
@@ -165,6 +173,7 @@ export const ROUTES: RouteDef[] = [
         ],
       },
       {
+        id: "fete",
         name: "FETE BREWING",
         d: 5300,
         side: "right",

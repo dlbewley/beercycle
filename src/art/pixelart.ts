@@ -377,6 +377,7 @@ function makeBrewery(scene: Phaser.Scene): void {
 
 import { ROUTES } from "../systems/routes";
 import type { BeerDef } from "../systems/beers";
+import { makeBreweryBackdrops } from "./breweryBackdrops";
 
 function drawGlass(ctx: CanvasRenderingContext2D, beer: BeerDef): void {
   const p = (x: number, y: number, w: number, h: number, c: string) => {
@@ -730,4 +731,5 @@ export function createGameTextures(scene: Phaser.Scene): void {
   makeBikeVariants(scene);
   makeBeerAndGlyphTextures(scene);
   makeDartboard(scene);
+  makeBreweryBackdrops(scene);
 }

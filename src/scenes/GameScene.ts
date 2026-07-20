@@ -198,6 +198,7 @@ export class GameScene extends Phaser.Scene {
     label: Phaser.GameObjects.Text;
   }> = [];
   private chiliOverlay!: Phaser.GameObjects.Rectangle;
+  private stopBackdrop!: Phaser.GameObjects.Image;
 
   // Touch input (beercycle-bkg): one-shot tap flags feed the same state
   // machine the keyboard uses; pointer position steers while riding.
@@ -422,6 +423,13 @@ export class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(999)
       .setAlpha(0);
+
+    // Brewery interior shown behind the chug panel during stops.
+    this.stopBackdrop = this.add
+      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, "__DEFAULT")
+      .setScrollFactor(0)
+      .setDepth(998)
+      .setVisible(false);
 
     this.createHud();
     this.createChugPanel();
@@ -940,6 +948,9 @@ export class GameScene extends Phaser.Scene {
     this.queuedEnter = false;
     this.bike.rotation = 0;
     audio.sfx("bell");
+    if (this.textures.exists(`bg_${b.id}`)) {
+      this.stopBackdrop.setTexture(`bg_${b.id}`).setVisible(true);
+    }
     this.chugPanel.setVisible(true);
     this.chugPanelBg.setStrokeStyle(2, b.accent);
     this.chugGlyph.setTexture(`glyph_${b.glyph}`).setTint(b.accent);
@@ -1369,6 +1380,7 @@ export class GameScene extends Phaser.Scene {
   private exitStop(): void {
     this.mode = "riding";
     this.happyHour = false;
+    this.stopBackdrop.setVisible(false);
     this.chugPanel.setVisible(false);
     this.speed = MIN_SPEED;
     this.invulnTimer = 1;

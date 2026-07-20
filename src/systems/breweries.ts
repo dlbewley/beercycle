@@ -7,6 +7,7 @@ import type { BeerDef } from "./beers";
 export type HouseGame = "darts" | "flight";
 
 export interface Brewery {
+  id: string; // stable slug for texture keys (bg_<id>)
   name: string;
   d: number;
   side: "left" | "right";
