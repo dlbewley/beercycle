@@ -67,7 +67,8 @@ export class ResultsScene extends Phaser.Scene {
       ...(wrap ? { wordWrap: { width: wrap } } : {}),
     });
 
-    const paper = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2, [
+    const avatarId = (this.registry.get("avatar") as string) ?? "dwnwrd";
+    const children: Phaser.GameObjects.GameObject[] = [
       this.add.rectangle(0, 0, 380, 230, 0xf2ead8).setStrokeStyle(2, 0x1a1423),
       this.add.text(0, -98, "THE BOULDER BUGLE", style("16px", INK)).setOrigin(0.5),
       this.add.rectangle(0, -86, 340, 1, 0x1a1423),
@@ -80,31 +81,53 @@ export class ResultsScene extends Phaser.Scene {
         .setOrigin(0.5),
       this.add
         .text(
-          0, -34,
+          0, -36,
           `Witnesses report ${breweries} brewery stop${breweries === 1 ? "" : "s"} on ${routeName}.` +
-            `  ${isFinal ? "Final score" : "Score so far"}: ${score}.`,
+            // The final page's score lives in the high-score table below.
+            (isFinal ? "" : `  Score so far: ${score}.`),
           style("8px", FADED_INK, 320),
         )
         .setOrigin(0.5),
-      this.add
-        .text(
-          0, -23,
-          data.quote ? `${data.riderName ?? "RIDER"}: "${data.quote}"` : "",
-          style("7px", FADED_INK, 320),
-        )
-        .setOrigin(0.5),
-      this.add.rectangle(0, -16, 340, 1, 0x1a1423),
-      this.add.text(0, -8, "— HIGH SCORES —", style("9px", INK)).setOrigin(0.5),
-      ...top.slice(0, isFinal ? 5 : 3).map((entry, i) => {
-        const isThisRun = entry.score === score;
-        return this.add
+    ];
+
+    if (isFinal) {
+      // The end-of-game page keeps the record books.
+      children.push(
+        this.add
           .text(
-            0, 8 + i * 12,
-            `${i + 1}. ${entry.name}  ${String(entry.score).padStart(6, ".")}${isThisRun ? "  <" : ""}`,
-            style("9px", isThisRun ? "#8a2b2b" : FADED_INK),
+            0, -23,
+            data.quote ? `${data.riderName ?? "RIDER"}: "${data.quote}"` : "",
+            style("8px", INK, 320),
           )
-          .setOrigin(0.5);
-      }),
+          .setOrigin(0.5),
+        this.add.rectangle(0, -14, 340, 1, 0x1a1423),
+        this.add.text(0, -6, "— HIGH SCORES —", style("9px", INK)).setOrigin(0.5),
+        ...top.slice(0, 5).map((entry, i) => {
+          const isThisRun = entry.score === score;
+          return this.add
+            .text(
+              0, 10 + i * 12,
+              `${i + 1}. ${entry.name}  ${String(entry.score).padStart(6, ".")}${isThisRun ? "  <" : ""}`,
+              style("9px", isThisRun ? "#8a2b2b" : FADED_INK),
+            )
+            .setOrigin(0.5);
+        }),
+      );
+    } else if (data.quote) {
+      // Transition page (beercycle-e2x): the rider's face next to a
+      // quote you can actually read, and no scoreboard — this is a
+      // pit stop, not a game over.
+      children.push(
+        this.add.rectangle(0, -24, 340, 1, 0x1a1423),
+        this.add.image(-140, 2, `av_${avatarId}_smug`).setScale(2),
+        this.add.text(-140, 34, data.riderName ?? "RIDER", style("6px", FADED_INK)).setOrigin(0.5),
+        this.add
+          .text(-108, 2, `"${data.quote}"`, style("9px", INK, 250))
+          .setOrigin(0, 0.5),
+      );
+    }
+
+    children.push(
       // Coming-attractions marquee for the next route (beercycle-zgh).
       ...this.nextRoutePreview(data, style),
       this.add
@@ -116,7 +139,9 @@ export class ResultsScene extends Phaser.Scene {
           style("9px", isFinal ? INK : "#8a2b2b"),
         )
         .setOrigin(0.5),
-    ]);
+    );
+
+    const paper = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2, children);
 
     // Paperboy-style spin-in.
     paper.setScale(0.05).setAngle(720);

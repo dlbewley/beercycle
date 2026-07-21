@@ -450,6 +450,26 @@ const GLYPHS: Record<string, string[]> = {
   halo: [".######.", "#......#", ".######.", "........", "...##...", "..####..", "..####..", "........"],
 };
 
+// Highway-green roadside sign announcing the next stretch of Boulder
+// (beercycle-e2x). The label text is overlaid by the scene, like the
+// brewery signboards.
+function makeRoadSign(scene: Phaser.Scene): void {
+  if (scene.textures.exists("roadsign")) return;
+  const w = 46;
+  const h = 32;
+  const canvas = scene.textures.createCanvas("roadsign", w, h)!;
+  const ctx = canvas.getContext();
+  ctx.fillStyle = "#8a8a8a"; // posts
+  ctx.fillRect(8, 20, 3, 12);
+  ctx.fillRect(35, 20, 3, 12);
+  ctx.fillStyle = "#14532d"; // the board
+  ctx.fillRect(1, 1, 44, 20);
+  ctx.strokeStyle = "#f7f7e8";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(2.5, 2.5, 41, 17);
+  canvas.refresh();
+}
+
 function makeDartboard(scene: Phaser.Scene): void {
   if (scene.textures.exists("dartboard")) return;
   const canvas = scene.textures.createCanvas("dartboard", 76, 76)!;
@@ -882,6 +902,7 @@ export function createGameTextures(scene: Phaser.Scene): void {
   makeAvatarTextures(scene);
   makeBikeVariants(scene);
   makeBeerAndGlyphTextures(scene);
+  makeRoadSign(scene);
   makeDartboard(scene);
   makeBreweryBackdrops(scene);
 }
