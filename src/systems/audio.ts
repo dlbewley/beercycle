@@ -9,17 +9,57 @@ type SfxName =
   | "bell" | "crash" | "pour" | "pickup" | "chug" | "bust" | "lastcall"
   | "thunk" | "buzzer";
 
-const BASS = [110, 110, 165, 110, 147, 110, 165, 196];
-const LEAD = [440, 523, 659, 523, 587, 494, 523, 392, 440, 523, 659, 784, 659, 587, 523, 494];
-const STEP_S = 0.22;
+// One chiptune flavor per route (beercycle-e2x): Pearl St keeps the
+// original sunny loop, The Hill runs brisker and minor-ish, East
+// Boulder stretches out slow and wide.
+interface MusicStyle {
+  bass: number[];
+  lead: number[];
+  step: number; // seconds per sequencer step
+}
+
+const MUSIC_STYLES: MusicStyle[] = [
+  {
+    bass: [110, 110, 165, 110, 147, 110, 165, 196],
+    lead: [440, 523, 659, 523, 587, 494, 523, 392, 440, 523, 659, 784, 659, 587, 523, 494],
+    step: 0.22,
+  },
+  {
+    bass: [98, 98, 147, 98, 131, 98, 156, 175],
+    lead: [392, 466, 587, 466, 523, 440, 466, 349, 392, 466, 587, 698, 587, 523, 466, 440],
+    step: 0.19,
+  },
+  {
+    bass: [131, 131, 196, 131, 175, 131, 196, 220],
+    lead: [523, 659, 784, 659, 698, 587, 659, 523, 523, 659, 784, 880, 784, 698, 659, 587],
+    step: 0.25,
+  },
+];
 
 class AudioSystem {
   private ctx: AudioContext | null = null;
   private musicGain: GainNode | null = null;
   private musicTimer: number | null = null;
   private step = 0;
+  private styleIndex = 0;
   private detuneCents = 0;
   private muted = false;
+
+  private get style(): MusicStyle {
+    return MUSIC_STYLES[this.styleIndex % MUSIC_STYLES.length];
+  }
+
+  // Pick the route's flavor; restarts the sequencer if music is playing.
+  setMusicStyle(index: number): void {
+    const next = index % MUSIC_STYLES.length;
+    if (next === this.styleIndex) return;
+    this.styleIndex = next;
+    this.step = 0;
+    if (this.musicTimer !== null) {
+      this.stopMusic();
+      this.startMusic();
+    }
+  }
 
   private ensure(): AudioContext | null {
     if (!this.ctx) {
@@ -81,17 +121,18 @@ class AudioSystem {
     if (!ctx || this.musicTimer !== null) return;
     const tick = () => {
       if (this.muted || !this.ctx) return;
+      const { bass, lead, step } = this.style;
       const t = this.ctx.currentTime + 0.05;
-      this.note(BASS[this.step % BASS.length], t, STEP_S * 0.9, "triangle", 0.2, this.musicGain!);
+      this.note(bass[this.step % bass.length], t, step * 0.9, "triangle", 0.2, this.musicGain!);
       if (this.step % 2 === 0) {
         this.note(
-          LEAD[Math.floor(this.step / 2) % LEAD.length], t, STEP_S * 1.6, "square", 0.06,
+          lead[Math.floor(this.step / 2) % lead.length], t, step * 1.6, "square", 0.06,
           this.musicGain!,
         );
       }
       this.step++;
     };
-    this.musicTimer = window.setInterval(tick, STEP_S * 1000);
+    this.musicTimer = window.setInterval(tick, this.style.step * 1000);
   }
 
   stopMusic(): void {

@@ -239,6 +239,7 @@ export class GameScene extends Phaser.Scene {
     this.routeDef = ROUTES[this.routeIndex];
     this.avatarId = (this.registry.get("avatar") as AvatarId) ?? "dwnwrd";
     this.roadW = this.routeDef.roadWidth;
+    audio.setMusicStyle(this.routeIndex); // each stretch of Boulder gets its own loop
     this.smugTimer = 0;
     this.lastSway = 0;
     this.buzz = new BuzzSystem();
@@ -345,6 +346,27 @@ export class GameScene extends Phaser.Scene {
       this.fixtures.push({ d: b.d, lat: buildingLat, obj: building });
       this.fixtures.push({ d: b.d, lat: zoneLat, obj: zone });
     }
+
+    // Roadside sign just before the finish line announcing what's next
+    // (beercycle-e2x) — ride past it and the Bugle transition follows.
+    const nextRoute = ROUTES[this.routeIndex + 1];
+    const signLabel = nextRoute ? `ENTERING\n${nextRoute.name}` : "BOULDER\nCITY LIMITS";
+    const sign = this.add.container(0, 0, [
+      this.add.image(0, 0, "roadsign"),
+      this.add
+        .text(0, -5, signLabel, {
+          fontFamily: "monospace",
+          fontSize: "6px",
+          color: "#f7f7e8",
+          align: "center",
+        })
+        .setOrigin(0.5),
+    ]);
+    this.fixtures.push({
+      d: this.routeDef.length - 70,
+      lat: this.roadW / 2 + 34,
+      obj: sign,
+    });
 
     // Moving hazards. Pedestrians wander the road, dogs bolt across,
     // geese hold their ground, car doors swing open near the curb.
