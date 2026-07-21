@@ -239,6 +239,48 @@ const SPRITES: Record<string, string[]> = {
     ".MMMMMMMM..",
     "..MMMMMM...",
   ],
+  // Boulder Canyon set dressing (beercycle-a70).
+  creek: [
+    "TTTTTTTTTTTTTTTT",
+    "TTHTTTTTTHHTTTTT",
+    "TTTTTHTTTTTTTHTT",
+    "THTTTTTTTHTTTTTT",
+    "TTTTTTTTTTTTTTTT",
+  ],
+  crag: [
+    "......GG..........",
+    ".....GGGG....GG...",
+    "....GGGGGG..GGGG..",
+    "...GGGEGGGGGGGGG..",
+    "..GGGGGGEGGGGEGG..",
+    ".GGGEGGGGGGGGGGG..",
+    ".GGGGGGGEGGGGGGGG.",
+    "GGGGGGGGGGGGEGGGG.",
+    "GGGGEGGGGGGGGGGGGG",
+    "GGGGGGGGGGGGGGGGGG",
+  ],
+  // Dispensary counter goods (beercycle-4uh).
+  gummy: [
+    ".LL.LL.",
+    "LLLLLLL",
+    "LLLLLLL",
+    ".LLLLL.",
+    ".LL.LL.",
+  ],
+  brownie: [
+    "BBBBBBB",
+    "BEBBEBB",
+    "BBBBBBB",
+    "BBEBBEB",
+    "BBBBBBB",
+  ],
+  taffy: [
+    "P..PPP..P",
+    "PPPPPPPPP",
+    "P.PHPHP.P",
+    "PPPPPPPPP",
+    "P..PPP..P",
+  ],
   flowers: [
     ".R...J.",
     "RRR.JJJ",
@@ -449,6 +491,38 @@ const GLYPHS: Record<string, string[]> = {
   fire: ["...#....", "..##....", "..###...", ".####...", ".#####..", "######..", ".####...", "........"],
   halo: [".######.", "#......#", ".######.", "........", "...##...", "..####..", "..####..", "........"],
 };
+
+// Dispensary storefront (beercycle-4uh): calmer than a brewery — sage
+// awning, a green cross where the windows would shout.
+function makeDispensaryFront(scene: Phaser.Scene): void {
+  if (scene.textures.exists("dispensary")) return;
+  const w = 46;
+  const h = 34;
+  const canvas = scene.textures.createCanvas("dispensary", w, h)!;
+  const ctx = canvas.getContext();
+  // Sign board up top (name text overlaid by the scene).
+  ctx.fillStyle = "#1c2418";
+  ctx.fillRect(1, 0, w - 2, 9);
+  // Facade.
+  ctx.fillStyle = "#8f9a7e";
+  ctx.fillRect(0, 9, w, h - 9);
+  // Awning, one calm color.
+  ctx.fillStyle = "#4e6a3e";
+  ctx.fillRect(0, 10, w, 5);
+  // Green cross in the window.
+  ctx.fillStyle = "#f2f2e4";
+  ctx.fillRect(5, 19, 11, 10);
+  ctx.fillStyle = "#5a9a4a";
+  ctx.fillRect(9, 20, 3, 8);
+  ctx.fillRect(6, 22, 9, 3);
+  // Second window, warm and low-key.
+  ctx.fillStyle = "#e4d9a8";
+  ctx.fillRect(30, 19, 11, 10);
+  // Door.
+  ctx.fillStyle = "#1c2418";
+  ctx.fillRect(19, 21, 8, 13);
+  canvas.refresh();
+}
 
 // Highway-green roadside sign announcing the next stretch of Boulder
 // (beercycle-e2x). The label text is overlaid by the scene, like the
@@ -902,6 +976,7 @@ export function createGameTextures(scene: Phaser.Scene): void {
   makeAvatarTextures(scene);
   makeBikeVariants(scene);
   makeBeerAndGlyphTextures(scene);
+  makeDispensaryFront(scene);
   makeRoadSign(scene);
   makeDartboard(scene);
   makeBreweryBackdrops(scene);

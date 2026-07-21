@@ -5,6 +5,18 @@ import type { Brewery } from "./breweries";
 // streak between them. Parody brewery roster: docs/GAME_DESIGN.md;
 // brewery identities and tap lists: beads epic beercycle-bmi.
 
+// Parody dispensaries (beercycle-4uh) — Boulder-local vibes, no real
+// shop trademarks. One purchase per stop; the edible menu lives in
+// GameScene.
+export interface DispensaryDef {
+  id: string;
+  name: string;
+  d: number;
+  side: "left" | "right";
+  accent: number;
+  tagline: string;
+}
+
 export interface RouteDef {
   id: string;
   name: string; // HUD label
@@ -18,6 +30,7 @@ export interface RouteDef {
   curveFreq: number;
   forecast: string; // hazard line shown on the transition preview
   breweries: Brewery[];
+  dispensaries?: DispensaryDef[];
   cones: number;
   peds: number;
   dogs: number;
@@ -81,6 +94,16 @@ export const ROUTES: RouteDef[] = [
           { id: "buffgold", name: "BUFF GOLD", style: "lager", abv: 4.6, color: "#e8c84a", head: "#ffffff", shape: "pint" },
           { id: "pucksporter", name: "PUCK'S PORTER", style: "porter", abv: 5.9, color: "#3a2418", head: "#d9b98a", shape: "nonic" },
         ],
+      },
+    ],
+    dispensaries: [
+      {
+        id: "herbalhands",
+        name: "HERBAL HANDS",
+        d: 3400,
+        side: "right",
+        accent: 0x6fae4e,
+        tagline: "ask your neighbor. they know us.",
       },
     ],
     cones: 5,
@@ -204,11 +227,80 @@ export const ROUTES: RouteDef[] = [
         ],
       },
     ],
+    dispensaries: [
+      {
+        id: "pharmstand",
+        name: "THE PHARM STAND",
+        d: 3600,
+        side: "left",
+        accent: 0x7fbf5e,
+        tagline: "farm to dab table.",
+      },
+    ],
     cones: 8,
     peds: 2,
     dogs: 1,
     geese: 3,
     doors: 4,
     cops: 3,
+  },
+  {
+    id: "canyon",
+    name: "BOULDER CANYON",
+    length: 6500,
+    roadColor: 0x34343c,
+    grassColor: 0x5b6353, // rocky sage, not lawn
+    roadWidth: 92, // two lanes and a prayer
+    curveAmp: 56,
+    curveFreq: 1 / 260,
+    forecast: "expect: falling rock, creek spray, tandem tourists",
+    // The climb to Ned: creek on the left, crags on the right.
+    breweries: [
+      {
+        id: "tangledstump",
+        name: "TANGLED STUMP",
+        d: 2400,
+        side: "left",
+        accent: 0x4e8a6e,
+        glyph: "pine",
+        tagline: "haze fresh off the creek.",
+        houseGame: "flight",
+        taps: [
+          { id: "creekhaze", name: "CREEKSIDE HAZE", style: "ipa", abv: 6.9, color: "#e0b048", head: "#f7f0dc", shape: "can" },
+          { id: "stumpjuice", name: "STUMP JUICE", style: "dipa", abv: 8.8, color: "#dd9a30", head: "#f7f0dc", shape: "snifter" },
+        ],
+      },
+      {
+        id: "prettydecent",
+        name: "PRETTY DECENT",
+        d: 5700,
+        side: "right",
+        accent: 0x8a9ab8,
+        glyph: "mountain",
+        tagline: "very nice up here. pretty decent, even.",
+        houseGame: "darts",
+        taps: [
+          { id: "firsttracks", name: "FIRST TRACKS IPA", style: "ipa", abv: 7.0, color: "#dda23c", head: "#f7f0dc", shape: "pint" },
+          { id: "tungsten", name: "TUNGSTEN STOUT", style: "stout", abv: 7.4, color: "#20140e", head: "#d9b98a", shape: "nonic" },
+          { id: "eldora", name: "ELDORA ALT", style: "brown", abv: 5.2, color: "#6a4226", head: "#e0c8a8", shape: "pint" },
+        ],
+      },
+    ],
+    dispensaries: [
+      {
+        id: "nedicated",
+        name: "NEDICATED",
+        d: 4600,
+        side: "right",
+        accent: 0x8fae4e,
+        tagline: "elevation: extremely.",
+      },
+    ],
+    cones: 4,
+    peds: 1,
+    dogs: 1,
+    geese: 2,
+    doors: 1,
+    cops: 2,
   },
 ];

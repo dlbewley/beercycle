@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT } from "../main";
 import { BuzzSystem } from "../systems/buzz";
 import { type Brewery } from "../systems/breweries";
-import { ROUTES, type RouteDef } from "../systems/routes";
+import { ROUTES, type RouteDef, type DispensaryDef } from "../systems/routes";
 import { audio } from "../systems/audio";
 import { type AvatarId, type AvatarState, AVATARS } from "../art/pixelart";
 import {
@@ -34,6 +34,20 @@ const OFFROAD_SPEED_CAP = 65;
 const STEER_SPEED = 95;
 const START_LIVES = 3;
 const TAB_LIMIT = 3; // beers per brewery stop before the bartender cuts you off
+
+// The dispensary case (beercycle-4uh): same menu statewide, effects
+// riffing on mechanics the road already knows (heavy legs, boost).
+interface EdibleDef {
+  id: "gummy" | "brownie" | "taffy";
+  name: string;
+  desc: string;
+}
+
+const EDIBLES: EdibleDef[] = [
+  { id: "gummy", name: "MILE HIGH GUMMIES", desc: "10mg * mellows the buzz" },
+  { id: "brownie", name: "COUCH LOCK BROWNIE", desc: "indica * big points, heavy legs" },
+  { id: "taffy", name: "UPHILL SATIVA TAFFY", desc: "sativa * legs of spring" },
+];
 
 type WorldObj =
   | Phaser.GameObjects.Shape
@@ -119,7 +133,7 @@ export class GameScene extends Phaser.Scene {
   private clouds: Phaser.GameObjects.Image[] = [];
   private pedalTimer = 0;
 
-  private mode: "riding" | "chugging" = "riding";
+  private mode: "riding" | "chugging" | "dispensary" = "riding";
   private paused = false;
   private pauseText!: Phaser.GameObjects.Text;
   private routeIndex = 0;
@@ -157,6 +171,20 @@ export class GameScene extends Phaser.Scene {
   private resultTimer = 0;
   private chugPhase: "pick" | "active" | "result" | "darts" | "flight" = "pick";
   private currentBrewery: Brewery | null = null;
+  private currentShop: DispensaryDef | null = null;
+  private edibleIndex = 0;
+  private edibleBought = false;
+  private dispPanel!: Phaser.GameObjects.Container;
+  private dispPanelBg!: Phaser.GameObjects.Rectangle;
+  private dispName!: Phaser.GameObjects.Text;
+  private dispTagline!: Phaser.GameObjects.Text;
+  private dispPrompt!: Phaser.GameObjects.Text;
+  private dispFeedback!: Phaser.GameObjects.Text;
+  private dispSlots: Array<{
+    box: Phaser.GameObjects.Rectangle;
+    icon: Phaser.GameObjects.Image;
+    label: Phaser.GameObjects.Text;
+  }> = [];
   private tapIndex = 0;
   private fillLevel = 0;
   private jitterCd = 0;
@@ -318,17 +346,51 @@ export class GameScene extends Phaser.Scene {
       });
     }
 
-    // Roadside greenery on both grass banks.
-    const decoKeys = ["tree", "tree", "bush", "flowers"];
-    for (let i = 0; i < 14; i++) {
-      const side = Math.random() < 0.5 ? -1 : 1;
-      this.props.push({
-        kind: "deco",
-        d: i * 95,
-        lat: side * (this.roadW / 2 + 46 + Phaser.Math.FloatBetween(0, 55)),
-        span: 14 * 95,
-        obj: this.add.image(0, 0, decoKeys[i % decoKeys.length]).setOrigin(0.5, 1),
-      });
+    if (this.routeDef.id === "canyon") {
+      // Boulder Canyon set dressing (beercycle-a70): the creek runs
+      // along the left bank, crags wall off the right, pines squeeze in
+      // where they can.
+      // Segments almost touch so the creek reads as one ribbon of water.
+      for (let i = 0; i < 34; i++) {
+        this.props.push({
+          kind: "deco",
+          d: i * 16,
+          lat: -(this.roadW / 2 + 50 + Math.sin(i * 0.7) * 8),
+          span: 34 * 16,
+          obj: this.add.image(0, 0, "creek"),
+        });
+      }
+      for (let i = 0; i < 12; i++) {
+        this.props.push({
+          kind: "deco",
+          d: i * 110 + 40,
+          lat: this.roadW / 2 + 58 + Phaser.Math.FloatBetween(0, 45),
+          span: 12 * 110,
+          obj: this.add.image(0, 0, "crag").setOrigin(0.5, 1),
+        });
+      }
+      for (let i = 0; i < 5; i++) {
+        this.props.push({
+          kind: "deco",
+          d: i * 260 + 130,
+          lat: this.roadW / 2 + 46,
+          span: 5 * 260,
+          obj: this.add.image(0, 0, "tree").setOrigin(0.5, 1),
+        });
+      }
+    } else {
+      // Roadside greenery on both grass banks.
+      const decoKeys = ["tree", "tree", "bush", "flowers"];
+      for (let i = 0; i < 14; i++) {
+        const side = Math.random() < 0.5 ? -1 : 1;
+        this.props.push({
+          kind: "deco",
+          d: i * 95,
+          lat: side * (this.roadW / 2 + 46 + Phaser.Math.FloatBetween(0, 55)),
+          span: 14 * 95,
+          obj: this.add.image(0, 0, decoKeys[i % decoKeys.length]).setOrigin(0.5, 1),
+        });
+      }
     }
 
     // Brewery buildings, signs, and stop zones on the shoulder.
@@ -347,10 +409,26 @@ export class GameScene extends Phaser.Scene {
       this.fixtures.push({ d: b.d, lat: zoneLat, obj: zone });
     }
 
+    // Dispensary storefronts and their stop zones (beercycle-4uh).
+    for (const shop of this.routeDef.dispensaries ?? []) {
+      const sideSign = shop.side === "left" ? -1 : 1;
+      const storefront = this.add.container(0, 0, [
+        this.add.image(0, 0, "dispensary"),
+        this.add
+          .text(0, -13, shop.name, { fontFamily: "monospace", fontSize: "6px", color: "#b8e8a0" })
+          .setOrigin(0.5),
+      ]);
+      const zone = this.add
+        .rectangle(0, 0, 42, 24, shop.accent, 0.28)
+        .setRotation(ROAD_ANGLE);
+      this.fixtures.push({ d: shop.d, lat: sideSign * (this.roadW / 2 + 40), obj: storefront });
+      this.fixtures.push({ d: shop.d, lat: sideSign * (this.roadW / 2 - 8), obj: zone });
+    }
+
     // Roadside sign just before the finish line announcing what's next
     // (beercycle-e2x) — ride past it and the Bugle transition follows.
     const nextRoute = ROUTES[this.routeIndex + 1];
-    const signLabel = nextRoute ? `ENTERING\n${nextRoute.name}` : "BOULDER\nCITY LIMITS";
+    const signLabel = nextRoute ? `ENTERING\n${nextRoute.name}` : "NEDERLAND\nELEV 8236";
     const sign = this.add.container(0, 0, [
       this.add.image(0, 0, "roadsign"),
       this.add
@@ -738,6 +816,151 @@ export class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(1002)
       .setVisible(false);
+
+    this.buildDispensaryPanel();
+  }
+
+  // --- The dispensary (beercycle-4uh) -----------------------------------
+
+  private buildDispensaryPanel(): void {
+    this.dispPanelBg = this.add.rectangle(0, 0, 310, 118, 0x14101c, 0.96);
+    this.dispName = this.add
+      .text(0, -44, "", { fontFamily: "monospace", fontSize: "12px", color: "#9fdc7a" })
+      .setOrigin(0.5);
+    this.dispTagline = this.add
+      .text(0, -31, "", { fontFamily: "monospace", fontSize: "7px", color: "#8a8a98" })
+      .setOrigin(0.5);
+    this.dispSlots = EDIBLES.map((e, i) => {
+      const x = (i - 1) * 100;
+      const box = this.add
+        .rectangle(x, 2, 92, 46, 0xffffff, 0.04)
+        .setStrokeStyle(1, 0x555566)
+        .setInteractive({ useHandCursor: true })
+        .on("pointerdown", () => this.onEdibleSlot(i));
+      const icon = this.add.image(x, -8, e.id);
+      const label = this.add
+        .text(x, 12, `${e.name}\n${e.desc}`, {
+          fontFamily: "monospace",
+          fontSize: "6px",
+          color: "#cfcfcf",
+          align: "center",
+          wordWrap: { width: 86 },
+        })
+        .setOrigin(0.5, 0.5);
+      return { box, icon, label };
+    });
+    this.dispFeedback = this.add
+      .text(0, 32, "", { fontFamily: "monospace", fontSize: "9px", color: "#9fdc7a" })
+      .setOrigin(0.5);
+    this.dispPrompt = this.add
+      .text(-40, 46, "", { fontFamily: "monospace", fontSize: "7px", color: "#9a9aa8" })
+      .setOrigin(0.5);
+    const rideBtn = this.add
+      .text(115, 46, "[ RIDE ON ]", { fontFamily: "monospace", fontSize: "8px", color: "#f7b32b" })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on("pointerdown", () => {
+        if (this.mode === "dispensary") this.exitDispensary();
+      });
+    this.dispPanel = this.add
+      .container(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 4, [
+        this.dispPanelBg, this.dispName, this.dispTagline,
+        ...this.dispSlots.flatMap((s) => [
+          s.box as Phaser.GameObjects.GameObject, s.icon, s.label,
+        ]),
+        this.dispFeedback, this.dispPrompt, rideBtn,
+      ])
+      .setScrollFactor(0)
+      .setDepth(1002)
+      .setVisible(false);
+
+    this.input.keyboard!.on("keydown-LEFT", () => {
+      if (this.mode !== "dispensary" || this.edibleBought) return;
+      this.edibleIndex = (this.edibleIndex + EDIBLES.length - 1) % EDIBLES.length;
+      this.refreshEdibleUI();
+    });
+    this.input.keyboard!.on("keydown-RIGHT", () => {
+      if (this.mode !== "dispensary" || this.edibleBought) return;
+      this.edibleIndex = (this.edibleIndex + 1) % EDIBLES.length;
+      this.refreshEdibleUI();
+    });
+    this.input.keyboard!.on("keydown-ENTER", () => {
+      if (this.mode === "dispensary") this.buyEdible();
+    });
+  }
+
+  private enterDispensary(shop: DispensaryDef): void {
+    this.mode = "dispensary";
+    this.currentShop = shop;
+    this.visited.add(shop.name);
+    this.edibleIndex = 0;
+    this.edibleBought = false;
+    this.bike.rotation = 0;
+    audio.sfx("bell");
+    audio.setDispensaryGroove(true); // irie in here
+    this.dispPanelBg.setStrokeStyle(2, shop.accent);
+    this.dispName.setText(shop.name);
+    this.dispTagline.setText(shop.tagline);
+    this.dispFeedback.setText("");
+    this.dispPrompt.setText("browse the case — arrows + ENTER, or tap");
+    this.dispPanel.setVisible(true);
+    this.refreshEdibleUI();
+  }
+
+  private refreshEdibleUI(): void {
+    const accent = this.currentShop?.accent ?? 0x6fae4e;
+    this.dispSlots.forEach((slot, i) => {
+      const selected = i === this.edibleIndex;
+      slot.box.setStrokeStyle(selected ? 2 : 1, selected ? accent : 0x555566);
+      slot.box.setFillStyle(0xffffff, selected ? 0.12 : 0.04);
+    });
+  }
+
+  private onEdibleSlot(i: number): void {
+    if (this.mode !== "dispensary" || this.edibleBought) return;
+    if (this.edibleIndex === i) {
+      this.buyEdible();
+    } else {
+      this.edibleIndex = i;
+      this.refreshEdibleUI();
+    }
+  }
+
+  private buyEdible(): void {
+    if (this.edibleBought) return;
+    this.edibleBought = true;
+    const edible = EDIBLES[this.edibleIndex];
+    audio.sfx("pickup");
+    switch (edible.id) {
+      case "gummy":
+        this.buzz.sober(15);
+        this.score += 150;
+        this.dispFeedback.setText("MELLOW.  BUZZ -15, +150");
+        break;
+      case "brownie":
+        this.score += 300;
+        this.heavyTimer = 8;
+        this.dispFeedback.setText("+300.  LEGS ARE FURNITURE NOW");
+        break;
+      case "taffy":
+        this.score += 200;
+        this.boostTimer = 6;
+        this.dispFeedback.setText("+200.  LEGS OF SPRING");
+        break;
+    }
+    this.dispPrompt.setText("one per customer. state law, man.");
+    this.time.delayedCall(1600, () => {
+      if (this.mode === "dispensary") this.exitDispensary();
+    });
+  }
+
+  private exitDispensary(): void {
+    audio.setDispensaryGroove(false);
+    this.dispPanel.setVisible(false);
+    this.mode = "riding";
+    this.speed = MIN_SPEED;
+    this.invulnTimer = 1;
+    this.steerHistory = [];
   }
 
   update(_time: number, delta: number): void {
@@ -747,6 +970,12 @@ export class GameScene extends Phaser.Scene {
 
     if (this.mode === "chugging") {
       this.chugUpdate(dt);
+      this.refreshHud();
+      return;
+    }
+
+    if (this.mode === "dispensary") {
+      // The case browses itself — input is all event-driven.
       this.refreshHud();
       return;
     }
@@ -828,6 +1057,19 @@ export class GameScene extends Phaser.Scene {
         b.side === "left" ? rel < -this.roadW / 2 + 16 : rel > this.roadW / 2 - 16;
       if (nearD && onSide) {
         this.enterStop(b);
+        return;
+      }
+    }
+
+    // Dispensary stop zones work the same way (beercycle-4uh).
+    for (const shop of this.routeDef.dispensaries ?? []) {
+      if (this.visited.has(shop.name)) continue;
+      const nearD = Math.abs(shop.d - this.d) < 18;
+      const rel = this.lat - this.centerLat(this.d);
+      const onSide =
+        shop.side === "left" ? rel < -this.roadW / 2 + 16 : rel > this.roadW / 2 - 16;
+      if (nearD && onSide) {
+        this.enterDispensary(shop);
         return;
       }
     }
@@ -1512,6 +1754,7 @@ export class GameScene extends Phaser.Scene {
   private portraitStateFor(): AvatarState {
     if (this.crashTimer > 0) return this.lives <= 0 ? "dead" : "wince";
     if (this.mode === "chugging") return this.smugTimer > 0 ? "smug" : "chug";
+    if (this.mode === "dispensary") return "tipsy"; // the half-lidded face earns its keep
     if (this.suspicion > 0.15) return "sweat";
     if (this.buzz.level >= 75) return "hammered";
     if (this.buzz.level >= 35) return "tipsy";
@@ -1587,6 +1830,7 @@ export class GameScene extends Phaser.Scene {
 
   private endRun(finished: boolean, busted = false): void {
     this.cameras.main.setScroll(0, 0);
+    audio.setDispensaryGroove(false); // never carry the skank into the Bugle
     const hasNext = finished && this.routeIndex < ROUTES.length - 1;
     const quote = busted
       ? vocabLine(this.avatarId, "bust")
