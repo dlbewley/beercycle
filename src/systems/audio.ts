@@ -11,11 +11,15 @@ type SfxName =
 
 // One chiptune flavor per route (beercycle-e2x): Pearl St keeps the
 // original sunny loop, The Hill runs brisker and minor-ish, East
-// Boulder stretches out slow and wide.
+// Boulder stretches out slow and wide, Boulder Canyon winds through a
+// minor arpeggio (beercycle-a70). A 0 in a pattern is a rest.
+// The last entry is the dispensary reggae groove (beercycle-4uh):
+// one-drop bass, staccato skanks on the offbeats.
 interface MusicStyle {
   bass: number[];
   lead: number[];
   step: number; // seconds per sequencer step
+  offbeat?: boolean; // lead hits land on the odd steps, short
 }
 
 const MUSIC_STYLES: MusicStyle[] = [
@@ -34,7 +38,19 @@ const MUSIC_STYLES: MusicStyle[] = [
     lead: [523, 659, 784, 659, 698, 587, 659, 523, 523, 659, 784, 880, 784, 698, 659, 587],
     step: 0.25,
   },
+  {
+    bass: [82, 82, 123, 82, 110, 82, 123, 147],
+    lead: [330, 392, 494, 392, 440, 370, 392, 294, 330, 392, 494, 587, 494, 440, 392, 370],
+    step: 0.21,
+  },
 ];
+
+const REGGAE_STYLE: MusicStyle = {
+  bass: [0, 98, 0, 98, 0, 73, 0, 98],
+  lead: [220, 262, 330, 262, 294, 247, 262, 196],
+  step: 0.26,
+  offbeat: true,
+};
 
 class AudioSystem {
   private ctx: AudioContext | null = null;
@@ -45,8 +61,12 @@ class AudioSystem {
   private detuneCents = 0;
   private muted = false;
 
+  private inDispensary = false;
+
   private get style(): MusicStyle {
-    return MUSIC_STYLES[this.styleIndex % MUSIC_STYLES.length];
+    return this.inDispensary
+      ? REGGAE_STYLE
+      : MUSIC_STYLES[this.styleIndex % MUSIC_STYLES.length];
   }
 
   // Pick the route's flavor; restarts the sequencer if music is playing.
@@ -54,6 +74,18 @@ class AudioSystem {
     const next = index % MUSIC_STYLES.length;
     if (next === this.styleIndex) return;
     this.styleIndex = next;
+    this.restart();
+  }
+
+  // Reggae takes over while browsing edibles (beercycle-4uh); the
+  // route's loop comes back when you ride on.
+  setDispensaryGroove(on: boolean): void {
+    if (this.inDispensary === on) return;
+    this.inDispensary = on;
+    this.restart();
+  }
+
+  private restart(): void {
     this.step = 0;
     if (this.musicTimer !== null) {
       this.stopMusic();
@@ -121,14 +153,22 @@ class AudioSystem {
     if (!ctx || this.musicTimer !== null) return;
     const tick = () => {
       if (this.muted || !this.ctx) return;
-      const { bass, lead, step } = this.style;
+      const { bass, lead, step, offbeat } = this.style;
       const t = this.ctx.currentTime + 0.05;
-      this.note(bass[this.step % bass.length], t, step * 0.9, "triangle", 0.2, this.musicGain!);
-      if (this.step % 2 === 0) {
-        this.note(
-          lead[Math.floor(this.step / 2) % lead.length], t, step * 1.6, "square", 0.06,
-          this.musicGain!,
-        );
+      const bassFreq = bass[this.step % bass.length];
+      if (bassFreq > 0) {
+        this.note(bassFreq, t, step * 0.9, "triangle", 0.2, this.musicGain!);
+      }
+      // Offbeat styles skank on the odd steps with short stabs.
+      const leadNow = offbeat ? this.step % 2 === 1 : this.step % 2 === 0;
+      if (leadNow) {
+        const leadFreq = lead[Math.floor(this.step / 2) % lead.length];
+        if (leadFreq > 0) {
+          this.note(
+            leadFreq, t, offbeat ? step * 0.45 : step * 1.6, "square",
+            offbeat ? 0.09 : 0.06, this.musicGain!,
+          );
+        }
       }
       this.step++;
     };
