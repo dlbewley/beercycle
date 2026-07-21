@@ -15,12 +15,19 @@ import { vocabLine } from "../systems/vocab";
 // position is a
 // fixed player anchor plus offsets along the two diagonal axes below —
 // the Paperboy pseudo-isometric look without real isometric tiles.
-const FORWARD = new Phaser.Math.Vector2(1, -2).normalize(); // up-right
-const CROSS = new Phaser.Math.Vector2(2, 1).normalize(); // across the road
+// World zoom (beercycle-t24): scales only the screen projection and the
+// world sprites — every gameplay quantity stays in road-space (d/lat),
+// so speeds, collisions, and spawn maths are untouched. Raised because
+// the sprites read too small on phones.
+const VIEW_SCALE = 1.3;
+const FORWARD = new Phaser.Math.Vector2(1, -2).normalize().scale(VIEW_SCALE); // up-right
+const CROSS = new Phaser.Math.Vector2(2, 1).normalize().scale(VIEW_SCALE); // across the road
 const ROAD_ANGLE = Math.atan2(FORWARD.y, FORWARD.x);
 
 const SHOULDER = 28; // rideable grass strip before the crash boundary
-const ANCHOR = new Phaser.Math.Vector2(150, 185); // bike's screen position
+// Anchor sits right-of-center so the diagonal road corridor spans the
+// middle of the frame instead of crowding the left edge.
+const ANCHOR = new Phaser.Math.Vector2(205, 190); // bike's screen position
 const MIN_SPEED = 50;
 const MAX_SPEED = 190;
 const OFFROAD_SPEED_CAP = 65;
@@ -405,7 +412,21 @@ export class GameScene extends Phaser.Scene {
       this.cops.push({ d: copD, lat: side, obj, alert });
     }
 
-    this.bike = this.add.image(ANCHOR.x, ANCHOR.y, `bike_${this.avatarId}_a`).setDepth(ANCHOR.y);
+    // Match every world sprite's visual size to the zoomed projection
+    // (multiply, not overwrite — some sprites carry their own scale).
+    const worldObjs: WorldObj[] = [
+      ...this.props.map((p) => p.obj),
+      ...this.fixtures.map((f) => f.obj),
+      ...this.npcs.map((n) => n.obj),
+      ...this.pickups.map((p) => p.obj),
+      ...this.cops.map((c) => c.obj),
+    ];
+    for (const o of worldObjs) o.setScale(o.scaleX * VIEW_SCALE, o.scaleY * VIEW_SCALE);
+
+    this.bike = this.add
+      .image(ANCHOR.x, ANCHOR.y, `bike_${this.avatarId}_a`)
+      .setScale(VIEW_SCALE)
+      .setDepth(ANCHOR.y);
     this.pedalTimer = 0;
 
     if (!this.textures.exists("vignette")) {
@@ -579,8 +600,8 @@ export class GameScene extends Phaser.Scene {
 
     // Doom-style status face, bottom-left (emptiest corner during play).
     this.portrait = this.add
-      .image(24, GAME_HEIGHT - 22, `av_${this.avatarId}_sober`)
-      .setScale(1.5)
+      .image(30, GAME_HEIGHT - 26, `av_${this.avatarId}_sober`)
+      .setScale(2)
       .setScrollFactor(0)
       .setDepth(1001);
     this.portraitState = "sober";
