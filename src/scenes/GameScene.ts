@@ -893,16 +893,19 @@ export class GameScene extends Phaser.Scene {
     return this.add.image(0, 0, kind); // texture keys match pickup kinds
   }
 
-  private popup(text: string, color: string): void {
+  // holdMs keeps the text at full alpha before the fade — voice lines
+  // are full sentences and need real reading time (beercycle-bs3).
+  private popup(text: string, color: string, holdMs = 350): void {
     const t = this.add
-      .text(ANCHOR.x, ANCHOR.y - 20, text, { fontFamily: "monospace", fontSize: "9px", color })
+      .text(ANCHOR.x, ANCHOR.y - 20, text, { fontFamily: "monospace", fontSize: "10px", color })
       .setOrigin(0.5)
+      .setStroke("#1a1a1a", 3)
       .setDepth(999);
     this.tweens.add({
       targets: t,
-      y: ANCHOR.y - 48,
-      alpha: 0,
-      duration: 900,
+      y: ANCHOR.y - 52,
+      alpha: { value: 0, delay: holdMs, duration: 900 },
+      duration: holdMs + 900,
       onComplete: () => t.destroy(),
     });
   }
@@ -1557,7 +1560,7 @@ export class GameScene extends Phaser.Scene {
     this.buzz.sober(8); // adrenaline
     this.cameras.main.shake(200, 0.01);
     audio.sfx("crash");
-    this.popup(vocabLine(this.avatarId, "crash"), "#ff9a8a");
+    this.popup(vocabLine(this.avatarId, "crash"), "#ff9a8a", 1500);
   }
 
   private endRun(finished: boolean, busted = false): void {
